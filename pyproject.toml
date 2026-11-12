@@ -1,0 +1,28 @@
+[project]
+name = "flood-map"
+version = "0.1.0"
+description = "A plain-language California flood risk map built from FEMA, state and USGS data"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.44",
+    "geopandas>=1.2",
+    "numpy>=2.5",
+    "pyproj>=3.8",
+    "python-dotenv>=1.1",
+    "rasterio>=1.5",
+    "requests>=2.34",
+    "scipy>=1.18",
+    "shapely>=2.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
