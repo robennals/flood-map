@@ -11,87 +11,124 @@
 <script src="config.js"></script>
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; color: #1d2329; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: #1d2329; }
   #map { position: absolute; inset: 0; }
-  #panel { position: absolute; top: 12px; left: 12px; width: min(380px, calc(100% - 24px)); z-index: 2;
-           background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.18); padding: 14px; }
-  h1 { font-size: 17px; margin: 0 0 8px; }
+  #panel { position: absolute; top: 10px; left: 10px; width: min(350px, calc(100% - 20px)); z-index: 2;
+           background: #fff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.18); padding: 10px; }
   form { display: flex; gap: 6px; }
-  input { flex: 1; padding: 8px 10px; font-size: 15px; border: 1px solid #b9c0c7; border-radius: 6px; }
-  button { padding: 8px 12px; font-size: 15px; border: 0; border-radius: 6px; background: #1d4ed8; color: #fff; }
-  #verdict { margin-top: 12px; display: none; }
-  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-weight: 600; color: #fff; }
-  ul { padding-left: 18px; margin: 8px 0; }
-  #closeVerdict { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; padding: 0; border-radius: 50%;
-                  background: #f1f5f9; color: #334155; font-size: 20px; line-height: 30px; display: none; cursor: pointer; }
-  #closeVerdict:hover { background: #e2e8f0; }
-  .small { font-size: 12.5px; color: #59636e; }
-  .legend { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
-  .legend span::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 2px;
-                         margin-right: 4px; vertical-align: -1px; background: var(--c); }
+  input[type=search] { flex: 1; min-width: 0; padding: 7px 9px; font-size: 14px; border: 1px solid #b9c0c7; border-radius: 6px; }
+  button { padding: 7px 11px; font-size: 14px; border: 0; border-radius: 6px; background: #1d4ed8; color: #fff; cursor: pointer; }
+  .legend { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .legend button { background: none; color: #1d2329; padding: 3px 6px; font-size: 13px; border: 1px solid transparent; }
+  .legend button:hover, .legend button[aria-expanded=true] { border-color: #cbd5e1; background: #f8fafc; }
+  .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 4px; vertical-align: -1px;
+            border: 1px solid rgba(0,0,0,.12); }
+  #levelInfo { margin-top: 6px; padding: 8px 10px; background: #f8fafc; border-radius: 8px; font-size: 13px; }
+  #levelInfo p { margin: 0 0 6px; }
+  #levelInfo ul { margin: 4px 0 0; padding-left: 18px; }
+  .row { margin-top: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .row button { background: #334155; padding: 5px 10px; font-size: 13px; }
+  .maplibregl-popup-content { font: 13px/1.4 system-ui, sans-serif; padding: 9px 26px 9px 11px; max-width: 250px; }
+  /* Phones: three short rows (search; key; buttons and links) so the map keeps the screen.
+     The key wraps to a second line only on the narrowest phones. */
+  @media (max-width: 600px) {
+    body { font-size: 13px; }
+    #panel { top: 6px; left: 6px; right: 6px; width: auto; padding: 6px; border-radius: 8px; }
+    input[type=search], form button { padding: 5px 8px; font-size: 14px; }
+    .legend { margin-top: 4px; gap: 0; }
+    .legend button { padding: 2px 3px; font-size: 11.5px; white-space: nowrap; }
+    .legend .swatch { width: 10px; height: 10px; margin-right: 3px; }
+    .row { margin-top: 4px; gap: 10px; font-size: 12px; flex-wrap: nowrap; white-space: nowrap; }
+    .row button { padding: 3px 8px; font-size: 12px; }
+    #levelInfo { font-size: 12px; padding: 6px 8px; }
+  }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-weight: 600; color: #fff; margin-bottom: 3px; }
+  .popup-line { margin: 3px 0 0; }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="panel">
-  <h1>How worried should I be about flooding?</h1>
-  <form id="search"><input id="q" placeholder="Enter a Bay Area address" autocomplete="street-address"><button>Check</button></form>
-  <button id="closeVerdict" type="button" aria-label="Close the result" title="Close">&times;</button>
-  <div id="verdict"></div>
-  <div class="legend">
-    <span style="--c:#b91c1c">Higher</span><span style="--c:#f97316">Elevated</span>
-    <span style="--c:#fcd34d">Moderate</span><span style="--c:#f1f5f9">Lower (no colour)</span>
+  <form id="search"><input type="search" id="q" placeholder="Enter a Bay Area address" autocomplete="street-address"
+    aria-label="Address"><button>Check</button></form>
+  <div class="legend" id="legend"></div>
+  <div id="levelInfo" hidden></div>
+  <div class="row">
+    <button id="toggle3d" type="button">Show in 3D</button>
+    <a href="about.html">How this map works</a>
+    <a href="what-to-do.html">What you can do</a>
   </div>
-  <label style="display:block;margin-top:8px"><input type="checkbox" id="history"> Show past floods</label>
-  <div id="historyLegend" class="legend" style="display:none">
-    <span style="--c:#60a5fa">Area that flooded (Valley Water records)</span>
-    <span style="--c:#1d4ed8">Flood insurance claims since 1995 (bigger = more)</span>
-  </div>
-  <button id="toggle3d" type="button" style="margin-top:8px;background:#334155">Show in 3D</button>
-  <div class="small"><a href="about.html">How this map works</a>. Test version covering the nine Bay Area counties and Santa Cruz County. Not an official flood determination.</div>
 </div>
 <script>
 const LEVELS = {
-  4: { name: "Higher risk", color: "#b91c1c",
-       blurb: "Official maps expect this area to flood in a serious storm (about a 1-in-100 chance each year, or more)." },
-  3: { name: "Elevated risk", color: "#f97316",
-       blurb: "This is low ground close to a flood zone or creek, or behind a levee. Water could reach it in a big storm." },
-  2: { name: "Moderate risk", color: "#fcd34d",
-       blurb: "This ground is a few metres above nearby flood zones or creeks. It would take an unusually large flood to reach it." },
-  1: { name: "Lower risk", color: "#94a3b8",
-       blurb: "No source flags this spot. Lower risk is not no risk: blocked storm drains can flood any street." },
+  4: { name: "Higher", color: "#b91c1c",
+       meaning: "Inside a flood zone that an official study expects to flood about once in 100 years or more often: FEMA's current or upcoming maps, or California's maps of streams FEMA never studied." },
+  3: { name: "Elevated", color: "#f97316",
+       meaning: "Low ground: less than about 1 m (3 ft) above the flood level of a nearby high-risk zone, or less than 1.5 m (5 ft) above the nearest creek or river. Also land behind levees." },
+  2: { name: "Moderate", color: "#fcd34d",
+       meaning: "Fairly low ground: less than about 3 m (10 ft) above the flood level of a nearby high-risk zone, or less than 4 m (13 ft) above the nearest creek or river." },
+  1: { name: "Lower", color: "#f1f5f9",
+       meaning: "None of the above. Lower is not no risk: heavy rain can overwhelm storm drains on any street." },
 };
-// Each source is its own layer of shapes. A spot's level is the highest level of any layer it falls in.
+const KEY = [
+  ...[4, 3, 2, 1].map(level => ({ ...LEVELS[level], shape: "square" })),
+  { name: "Past flood", short: "Floods", color: "#60a5fa", shape: "square",
+    meaning: "An area that really flooded, from Santa Clara Valley Water District's records (Coyote Creek 2017, San Francisquito Creek 1998 and 2023, and others). Records from other counties aren't included yet." },
+  { name: "Insurance claims", short: "Claims", color: "#1d4ed8", shape: "circle",
+    meaning: "Flood insurance claims filed since 1995, from FEMA. Each circle is one neighbourhood (census block group); bigger means more claims. Only insured homes file claims, so more homes may have flooded." },
+];
+
+// Each source is its own layer of shapes; a spot's level is the highest level of any layer it falls in.
+// The short reason shown in the popup comes from that highest layer.
 const SOURCES = [
-  ["fema_high", 4, "FEMA's flood study of the nearby creek or river marks this as high-risk (1% chance each year)."],
-  ["prelim_high", 4, "FEMA's upcoming (preliminary) flood study marks this as high-risk."],
-  ["dwr_awareness", 4, "California's water agency flags a floodplain here along a stream FEMA never studied."],
-  ["levee", 3, "It is behind a levee. Protected in most storms, but flooding would be serious if the levee failed."],
-  ["terrain_elevated", 3, "Low ground: within about 1 m (3 ft) of the flood level of a nearby high-risk zone, or less than 1.5 m (5 ft) above the nearest creek or river."],
-  ["terrain_moderate", 2, "Fairly low ground: within about 3 m (10 ft) of the flood level of a nearby high-risk zone, or less than 4 m (13 ft) above the nearest creek or river."],
-  ["note_fema_500", 1, "Note: FEMA labels this a 500-year flood zone. In this county FEMA applies that label to most of some cities and almost none of others, so we don't use it to set the level."],
-  ["undetermined", 1, "Note: FEMA lists the flood risk here as \"undetermined\" (never studied), so this answer relies on the terrain."],
+  ["fema_high", 4, "In FEMA's 100-year flood zone."],
+  ["prelim_high", 4, "In FEMA's upcoming 100-year flood zone."],
+  ["dwr_awareness", 4, "In a state-mapped floodplain along a stream FEMA never studied."],
+  ["levee", 3, "Behind a levee."],
+  ["terrain_elevated", 3, "Low ground near a flood zone, creek or river."],
+  ["terrain_moderate", 2, "A few metres above a nearby flood zone, creek or river."],
 ];
 const COLORS = { 4: "#b91c1c", 3: "#f97316", 2: "#fcd34d" };
 // Lighter tints of the same colours for street-level zoom, so the map isn't overwhelming up close
 const TINTS = { 4: "#e7a4a4", 3: "#fcbf96", 2: "#fde9a6" };
+
+// Colour key: each entry is a button that opens what it means (short labels on phones)
+const PHONE = window.matchMedia("(max-width: 600px)").matches;
+const legend = document.getElementById("legend"), levelInfo = document.getElementById("levelInfo");
+for (const entry of KEY) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.setAttribute("aria-expanded", "false");
+  button.innerHTML = `<span class="swatch" style="background:${entry.color}${entry.shape === "circle" ? ";border-radius:50%" : ""}"></span>${PHONE && entry.short ? entry.short : entry.name}`;
+  button.addEventListener("click", () => {
+    const opening = button.getAttribute("aria-expanded") === "false";
+    for (const b of legend.children) b.setAttribute("aria-expanded", "false");
+    levelInfo.hidden = !opening;
+    if (!opening) return;
+    button.setAttribute("aria-expanded", "true");
+    levelInfo.innerHTML = `<p><b>${entry.name}:</b> ${entry.meaning}</p>`;
+  });
+  legend.append(button);
+}
 
 const protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 const CONFIG = window.FLOOD_MAP_CONFIG;
 const DATA_BASE = (new URLSearchParams(location.search).get("data") === "local" ? "data" : CONFIG.dataUrl)
   + `/${CONFIG.region}/`;
-const tiles = DATA_BASE + "risk.pmtiles";
 
 const map = new maplibregl.Map({
   container: "map",
+  attributionControl: { compact: true },
   style: "https://tiles.openfreemap.org/styles/positron",
   center: [-122.25, 37.75], zoom: 8.6,
 });
+// Zoom buttons make zooming obvious; the compass resets rotation and tilt after using 3D
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), PHONE ? "bottom-right" : "top-right");
 map.on("load", () => {
-  map.addSource("risk", { type: "vector", url: `pmtiles://${new URL(tiles, location.href)}` });
+  map.addSource("risk", { type: "vector", url: `pmtiles://${new URL(DATA_BASE + "risk.pmtiles", location.href)}` });
   const firstSymbol = map.getStyle().layers.find(l => l.type === "symbol")?.id;
-  // Solid fills go under the basemap's creeks, buildings and roads so streets stay readable
+  // Solid fills go under the basemap's roads so streets stay readable
   const underStreets = "tunnel_motorway_casing";
   // Free elevation tiles (AWS Open Data "Terrain Tiles"), used for hill shading and 3D
   const dem = { type: "raster-dem", tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
@@ -104,15 +141,15 @@ map.on("load", () => {
   // Draw lowest levels first so higher levels paint on top
   for (const [name, level] of [...SOURCES].reverse()) {
     map.addLayer({ id: name, type: "fill", source: "risk", "source-layer": name,
-                   paint: { "fill-color": COLORS[level] ? ["interpolate", ["linear"], ["zoom"], 12, COLORS[level], 15, TINTS[level]] : "#000", "fill-opacity": COLORS[level] ? 1 : 0 } }, underStreets);
+                   paint: { "fill-color": ["interpolate", ["linear"], ["zoom"], 12, COLORS[level], 15, TINTS[level]] } },
+                 underStreets);
   }
   map.addSource("history", { type: "vector", url: `pmtiles://${new URL(DATA_BASE + "history.pmtiles", location.href)}` });
-  const hidden = { visibility: "none" };
-  map.addLayer({ id: "past_floods_fill", type: "fill", source: "history", "source-layer": "past_floods", layout: hidden,
+  map.addLayer({ id: "past_floods_fill", type: "fill", source: "history", "source-layer": "past_floods",
                  paint: { "fill-color": "#60a5fa", "fill-opacity": 0.45 } }, firstSymbol);
-  map.addLayer({ id: "past_floods_line", type: "line", source: "history", "source-layer": "past_floods", layout: hidden,
+  map.addLayer({ id: "past_floods_line", type: "line", source: "history", "source-layer": "past_floods",
                  paint: { "line-color": "#1d4ed8", "line-width": 2 } }, firstSymbol);
-  map.addLayer({ id: "claims", type: "circle", source: "history", "source-layer": "claims", layout: hidden,
+  map.addLayer({ id: "claims", type: "circle", source: "history", "source-layer": "claims",
                  paint: { "circle-color": "#1d4ed8", "circle-opacity": 0.8, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5,
                           "circle-radius": ["interpolate", ["linear"], ["sqrt", ["get", "claims"]], 1, 4, 10, 18] } }, firstSymbol);
   map.addLayer({ id: "hillshade", type: "hillshade", source: "dem",
@@ -120,65 +157,80 @@ map.on("load", () => {
                           "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#5a4a35" } }, underStreets);
 });
 
-function explain(lngLat) {
-  const pt = map.project(lngLat);
-  const box1 = [[pt.x - 1, pt.y - 1], [pt.x + 1, pt.y + 1]];
-  const inCoverage = map.queryRenderedFeatures(box1, { layers: ["coverage"] }).length > 0 || insideCoverage(lngLat);
-  const hitNames = new Set(map.queryRenderedFeatures(box1, { layers: SOURCES.map(s => s[0]) }).map(f => f.layer.id));
-  const hits = SOURCES.filter(([name]) => hitNames.has(name));
-  let info, reasons;
-  if (!inCoverage) {
-    info = { name: "No data here yet", color: "#64748b",
-             blurb: "This map covers land in the nine Bay Area counties and Santa Cruz County. No data does not mean no risk." };
-    reasons = [];
-  } else {
-    const level = Math.max(1, ...hits.map(h => h[1]));
-    info = LEVELS[level];
-    reasons = hits.map(h => h[2]);
-    if (!reasons.length) reasons.push("None of the flood maps used here mark this spot.");
-  }
-  // Past floods (only when that view is on): flood outlines at the spot, and claims within about 400 m
-  if (document.getElementById("history").checked) {
-    for (const f of map.queryRenderedFeatures(box1, { layers: ["past_floods_fill"] }))
-      reasons.push(`<b>This spot flooded${f.properties.year ? " in " + f.properties.year : ""}</b> (${f.properties.creek}, Valley Water records).`);
-    const near = map.queryRenderedFeatures(pt, { layers: ["claims"] });
-    for (const f of near.slice(0, 1))
-      reasons.push(`<b>${f.properties.claims} flood insurance claim${f.properties.claims > 1 ? "s" : ""}</b> were filed in this neighbourhood since 1995 (${f.properties.years}).`);
-  }
-  const box = document.getElementById("verdict");
-  box.style.display = "block";
-  document.getElementById("closeVerdict").style.display = "block";
-  box.innerHTML = `<span class="badge" style="background:${info.color}">${info.name}</span>
-    <p>${info.blurb}</p>${reasons.length ? `<b>Why:</b><ul>${reasons.map(r => `<li>${r}</li>`).join("")}</ul>` : ""}
-    <p class="small"><a href="about.html">How we worked this out</a></p>
-    <b>What to do now:</b><ul>
-      <li><a href="https://calalerts.org/signup.html" target="_blank">Sign up for your county's emergency alerts</a>.</li>
-      <li>Check <a href="https://www.weather.gov/mtr/" target="_blank">current National Weather Service warnings</a>.</li>
-      <li>Flood insurance usually takes 30 days to start, so don't wait for a storm warning. <a href="https://www.floodsmart.gov/" target="_blank">FloodSmart.gov</a></li>
-    </ul>`;
-}
-
-// Point-in-polygon against the coverage outline (drawn as a line, so not hit by clicks inside it)
+// Point-in-polygon against the coverage outline (drawn as a line, so clicks inside it don't hit it)
 function insideCoverage(lngLat) {
-  const feats = map.querySourceFeatures("risk", { sourceLayer: "coverage" });
-  const [x, y] = Array.isArray(lngLat) ? lngLat : [lngLat.lng, lngLat.lat];
-  return feats.some(f => {
-    const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
-    return polys.some(rings => rings.reduce((inside, ring) => {
-      let c = false;
+  const [x, y] = [lngLat.lng, lngLat.lat];
+  return map.querySourceFeatures("risk", { sourceLayer: "coverage" }).some(f => {
+    const polygons = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    return polygons.some(rings => rings.reduce((inside, ring) => {
+      let crossings = false;
       for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
         const [xi, yi] = ring[i], [xj, yj] = ring[j];
-        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) crossings = !crossings;
       }
-      return inside !== c;
+      return inside !== crossings;
     }, false));
   });
 }
 
-const HISTORY_LAYERS = ["past_floods_fill", "past_floods_line", "claims"];
-document.getElementById("history").addEventListener("change", e => {
-  for (const id of HISTORY_LAYERS) map.setLayoutProperty(id, "visibility", e.target.checked ? "visible" : "none");
-  document.getElementById("historyLegend").style.display = e.target.checked ? "flex" : "none";
+// The level at a spot, and the one-line reason for it
+function levelAt(lngLat) {
+  const point = map.project(lngLat);
+  const box = [[point.x - 1, point.y - 1], [point.x + 1, point.y + 1]];
+  if (!insideCoverage(lngLat)) return { name: "No data here yet", color: "#64748b",
+    reason: "This map covers land in the nine Bay Area counties and Santa Cruz County." };
+  const hitNames = new Set(map.queryRenderedFeatures(box, { layers: SOURCES.map(s => s[0]) }).map(f => f.layer.id));
+  const top = SOURCES.filter(([name]) => hitNames.has(name)).sort((a, b) => b[1] - a[1])[0];
+  if (!top) return { ...LEVELS[1], color: "#94a3b8", reason: "No flood source is mapped here." };
+  return { ...LEVELS[top[1]], reason: top[2] };
+}
+
+// A note when the spot is inside a recorded past flood
+function pastFloodNote(point) {
+  const flood = map.queryRenderedFeatures([[point.x - 1, point.y - 1], [point.x + 1, point.y + 1]], { layers: ["past_floods_fill"] })[0];
+  return flood ? `<p class="popup-line">Flooded${flood.properties.year ? " in " + flood.properties.year : ""} (${flood.properties.creek}).</p>` : "";
+}
+
+let popup;
+function showPopup(lngLat, html) {
+  popup?.remove();
+  popup = new maplibregl.Popup({ maxWidth: "260px", focusAfterOpen: false }).setLngLat(lngLat).setHTML(html).addTo(map);
+}
+function showLevel(lngLat) {
+  const at = levelAt(lngLat);
+  showPopup(lngLat, `<span class="badge" style="background:${at.color};color:${at.name === "Moderate" ? "#1d2329" : "#fff"}">${at.name}</span>
+    <p class="popup-line">${at.reason}</p>${pastFloodNote(map.project(lngLat))}`);
+}
+
+// Clicking a claims circle describes that neighbourhood's claims instead of the ground under it
+function claimsAt(point) {
+  const pad = 6;
+  return map.queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ["claims"] })[0] || null;
+}
+function showClaims(lngLat, claims) {
+  const n = claims.properties.claims;
+  showPopup(lngLat, `<span class="badge" style="background:#1d4ed8">Past flood damage</span>
+    <p class="popup-line"><b>${n} insurance claim${n > 1 ? "s" : ""}</b> in this neighbourhood since 1995: ${claims.properties.years}.</p>
+    <p class="popup-line" style="color:#59636e">Only insured homes file claims. The circle marks the neighbourhood, not the homes.</p>`);
+}
+
+map.on("mousemove", e => { map.getCanvas().style.cursor = claimsAt(e.point) ? "pointer" : ""; });
+map.on("click", e => {
+  const claims = claimsAt(e.point);
+  if (claims) showClaims(claims.geometry.coordinates, claims);
+  else showLevel(e.lngLat);
+});
+
+document.getElementById("search").addEventListener("submit", async e => {
+  e.preventDefault();
+  const q = document.getElementById("q").value;
+  // Only search inside the covered area, so a street name shared with somewhere else can't land elsewhere
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox=-123.7,39.0,-121.2,36.8&bounded=1&q=${encodeURIComponent(q)}`;
+  const [hit] = await (await fetch(url)).json();
+  if (!hit) { alert("Couldn't find that address."); return; }
+  const lngLat = new maplibregl.LngLat(Number(hit.lon), Number(hit.lat));
+  map.flyTo({ center: lngLat, zoom: 15, duration: 0 });
+  map.once("idle", () => showLevel(lngLat));
 });
 
 document.getElementById("toggle3d").addEventListener("click", e => {
@@ -186,58 +238,6 @@ document.getElementById("toggle3d").addEventListener("click", e => {
   map.setTerrain(on ? { source: "dem3d", exaggeration: 1.5 } : null);
   map.easeTo({ pitch: on ? 60 : 0, duration: 800 });
   e.target.textContent = on ? "Back to flat map" : "Show in 3D";
-});
-
-document.getElementById("closeVerdict").addEventListener("click", () => {
-  document.getElementById("verdict").style.display = "none";
-  document.getElementById("closeVerdict").style.display = "none";
-  marker?.remove();
-});
-
-let marker;
-document.getElementById("search").addEventListener("submit", async e => {
-  e.preventDefault();
-  const q = document.getElementById("q").value;
-  // Only search inside the Bay Area, so a street name shared with somewhere else can't land elsewhere
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox=-123.7,39.0,-121.2,36.8&bounded=1&q=${encodeURIComponent(q)}`;
-  const [hit] = await (await fetch(url)).json();
-  if (!hit) { alert("Couldn't find that address."); return; }
-  const lngLat = [Number(hit.lon), Number(hit.lat)];
-  marker?.remove();
-  marker = new maplibregl.Marker().setLngLat(lngLat).addTo(map);
-  map.flyTo({ center: lngLat, zoom: 15, duration: 0 });
-  map.once("idle", () => explain(lngLat));
-});
-// Clicking a claims circle describes that neighbourhood's past claims instead of the ground under it
-function claimsAt(point) {
-  if (!document.getElementById("history").checked) return null;
-  const pad = 6;
-  return map.queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ["claims"] })[0] || null;
-}
-function showClaims(f) {
-  const n = f.properties.claims;
-  const years = f.properties.years.split(", ").map(y => {
-    const [year, count] = y.replace(")", "").split(" (");
-    return `<li>${year}: ${count || 1} claim${(count || 1) > 1 ? "s" : ""}</li>`;
-  }).join("");
-  const box = document.getElementById("verdict");
-  box.style.display = "block";
-  document.getElementById("closeVerdict").style.display = "block";
-  box.innerHTML = `<span class="badge" style="background:#1d4ed8">Past flood damage</span>
-    <p><b>${n} flood insurance claim${n > 1 ? "s were" : " was"} filed in this neighbourhood</b> since 1995.</p>
-    <b>When:</b><ul>${years}</ul>
-    <p class="small">Only homes with flood insurance file claims, so more homes may have flooded than this shows.
-    FEMA only says which neighbourhood (census block group) each claim came from, so the circle sits in the middle
-    of that neighbourhood, not on the flooded homes.</p>`;
-}
-map.on("mousemove", e => { map.getCanvas().style.cursor = claimsAt(e.point) ? "pointer" : ""; });
-
-map.on("click", e => {
-  marker?.remove();
-  const claims = claimsAt(e.point);
-  if (claims) { showClaims(claims); return; }
-  marker = new maplibregl.Marker().setLngLat(e.lngLat).addTo(map);
-  explain(e.lngLat);
 });
 </script>
 </body>
