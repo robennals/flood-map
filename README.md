@@ -1,12 +1,12 @@
 # Flood map: "How worried should I be about flooding?"
 
-A free website where someone types their address and gets a plain-language answer about flood risk
-where they live, with the reasons and what to do now. It currently covers the nine San Francisco Bay
-Area counties and Santa Cruz County.
+A free website where someone types their address and sees how worried to be about flooding where they
+live: a colour-coded map with a one-line reason for any spot, plus a page on what to do about it. It
+currently covers the nine San Francisco Bay Area counties and Santa Cruz County.
 
 - **What it shows:** four levels (Higher, Elevated, Moderate, Lower) built from FEMA's and California's
-  studied creek flood zones plus the shape of the land, with an optional view of past floods and flood
-  insurance claims.
+  studied creek flood zones plus the shape of the land, with past floods and flood insurance claims
+  marked on the map.
 - **How it works:** explained for the public in [web/about.html](web/about.html). The model itself is
   [pipeline/model.py](pipeline/model.py).
 - **Not official:** this is not a FEMA flood determination. Use
