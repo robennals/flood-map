@@ -1,0 +1,17 @@
+# Downloaded and generated data (re-create with `make fetch build`)
+data/
+web/data/
+*.pmtiles
+*.partial
+
+# Secrets
+.env*
+!.env.example
+
+# Tooling
+.venv/
+node_modules/
+__pycache__/
+
+# Old exploratory work, kept locally only
+spike/
