@@ -15,3 +15,6 @@ __pycache__/
 
 # Old exploratory work, kept locally only
 spike/
+
+# Vercel project link (local to each checkout)
+.vercel/

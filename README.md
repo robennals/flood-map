@@ -95,7 +95,8 @@ The website reads its map files from the address in [web/config.js](web/config.j
    Object Read & Write on the bucket.
 4. **Upload:** `make upload` puts the files at `<bucket>/<region>/`.
 5. **Point the site at it:** set `dataUrl` in `web/config.js`, then host the `web/` folder on any static
-   host (for example Vercel with `web` as the root directory).
+   host. The live site is on Vercel: `cd web && vercel link` once, then `vercel deploy --prod`.
+   `web/.vercelignore` keeps local map copies and env files out of the upload.
 
 ## The model in brief
 
