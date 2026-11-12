@@ -128,8 +128,17 @@ const map = new maplibregl.Map({
   style: "https://tiles.openfreemap.org/styles/positron",
   center: [-122.25, 37.75], zoom: 8.6,
 });
-// Zoom buttons make zooming obvious; the compass resets rotation and tilt after using 3D
-map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), PHONE ? "bottom-right" : "top-right");
+// Zoom buttons make zooming obvious ("Back to flat map" resets rotation and tilt, so no compass)
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), PHONE ? "bottom-right" : "top-right");
+// Rotation is only allowed in 3D; with no compass, a rotated flat map would have no way back
+function allowRotation(allowed) {
+  if (allowed) {
+    map.dragRotate.enable(); map.touchZoomRotate.enableRotation(); map.keyboard.enableRotation();
+  } else {
+    map.dragRotate.disable(); map.touchZoomRotate.disableRotation(); map.keyboard.disableRotation();
+  }
+}
+allowRotation(false);
 map.on("load", () => {
   map.addSource("risk", { type: "vector", url: `pmtiles://${new URL(DATA_BASE + "risk.pmtiles", location.href)}` });
   const firstSymbol = map.getStyle().layers.find(l => l.type === "symbol")?.id;
@@ -235,9 +244,9 @@ let pressTimer = null, pressStart = null, pressFired = false;
 map.on("click", e => {
   if (!TOUCH) { showPopupAt(e.point, e.lngLat); return; }
   if (pressFired) { pressFired = false; return; }  // the click browsers send when a long press ends
+  if (popup?.isOpen()) { popup.remove(); return; }  // with a popup open, a tap outside it only closes it
   const claims = claimsAt(e.point);  // claims circles are obvious targets, so a tap opens them
   if (claims) showClaims(claims.geometry.coordinates, claims);
-  else popup?.remove();  // any other quick tap dismisses the popup
 });
 function cancelPress() { clearTimeout(pressTimer); pressTimer = null; }
 map.on("touchstart", e => {
@@ -255,6 +264,9 @@ map.on("touchmove", e => {
 map.on("touchend", cancelPress);
 map.on("touchcancel", cancelPress);
 
+// Tapping or clicking the panel closes any open popup
+document.getElementById("panel").addEventListener("pointerdown", () => popup?.remove());
+
 // First visit on a touch screen: say how to see the risk at a spot
 const hint = document.getElementById("hint");
 function hideHint() { hint.hidden = true; }
@@ -262,6 +274,9 @@ if (TOUCH && !localStorage.getItem("longPressHintShown")) {
   localStorage.setItem("longPressHintShown", "1");
   hint.hidden = false;
   setTimeout(hideHint, 6000);
+  // Any first interaction (dragging, pinching, tapping the panel, typing an address) means they've started
+  for (const type of ["pointerdown", "touchstart", "keydown"])
+    window.addEventListener(type, hideHint, { once: true, capture: true });
 }
 
 document.getElementById("search").addEventListener("submit", async e => {
@@ -279,7 +294,8 @@ document.getElementById("search").addEventListener("submit", async e => {
 document.getElementById("toggle3d").addEventListener("click", e => {
   const on = !map.getTerrain();
   map.setTerrain(on ? { source: "dem3d", exaggeration: 1.5 } : null);
-  map.easeTo({ pitch: on ? 60 : 0, duration: 800 });
+  map.easeTo(on ? { pitch: 60, duration: 800 } : { pitch: 0, bearing: 0, duration: 800 });
+  allowRotation(on);
   e.target.textContent = on ? "Back to flat map" : "Show in 3D";
 });
 </script>
