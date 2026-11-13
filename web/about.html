@@ -32,8 +32,7 @@
   studied. Everywhere else, we judge risk from the shape of the land: how far each spot sits above those flood
   zones and above the nearest creek. We checked the result against real floods (Coyote Creek 2017, San Francisquito
   Creek 1998 and 2023, and others) and against 30 years of flood insurance claims.</p>
-  <p><b>This is not an official flood determination.</b> It is a test version that covers the nine San Francisco Bay Area counties and Santa Cruz County.
-  For insurance or building decisions, use <a href="https://msc.fema.gov/portal/home">FEMA's official maps</a>.</p>
+  <p><b>This is not an official government flood report.</b> It is something I have personally created, based on my own personal interpretation of the best data I could find. For insurance or building decisions, use <a href="https://msc.fema.gov/portal/home">FEMA's official maps</a>.</p>
 </div>
 
 <h2>The four levels</h2>
@@ -42,10 +41,13 @@
   <tr><td><span class="swatch" style="background:#b91c1c"></span><b>Higher</b></td>
       <td>Inside a flood zone that an official creek study expects to flood about once in 100 years or more often:
       FEMA's current maps, FEMA's upcoming (preliminary) maps, or California's "awareness" floodplains for streams
-      FEMA never studied.</td></tr>
+      FEMA never studied. Also land behind a levee that the US Army Corps of Engineers expects to be overtopped more
+      often than once in 100 years.</td></tr>
   <tr><td><span class="swatch" style="background:#f97316"></span><b>Elevated</b></td>
       <td>Low ground: less than about 1 m (3 ft) above the flood level of a nearby high-risk zone, or less than
-      1.5 m (5 ft) above the nearest creek. Also land that FEMA lists as protected by a levee.</td></tr>
+      1.5 m (5 ft) above the nearest creek. Also land protected by a levee (from FEMA's maps or the Army Corps'
+      National Levee Database): the levee keeps it dry in most floods, but it floods if the levee is overtopped or
+      fails, and then the flooding can be sudden and deep.</td></tr>
   <tr><td><span class="swatch" style="background:#fcd34d"></span><b>Moderate</b></td>
       <td>Fairly low ground: less than about 3 m (10 ft) above the flood level of a nearby high-risk zone, or less
       than 4 m (13 ft) above the nearest creek.</td></tr>
@@ -78,6 +80,18 @@ flood zone, we find the nearest large flood zone and compare ground heights:</p>
 <p>Many small creeks were never studied by anyone. To cover them, we use a national dataset that gives, for every
 10 m of ground, its height above the nearest creek or drainage channel ("height above nearest drainage"). Land only
 a metre or two above a creek is where creeks overflow first.</p>
+<p>Only real stream channels count. A channel's flood potential comes from the water arriving from upstream (rain
+and snowmelt over its whole drainage area), not from the rain where it happens to be, so:</p>
+<ul>
+  <li><b>Canals, ditches and pipelines never count.</b> They carry managed water, not floods.</li>
+  <li><b>In wet regions, every natural stream counts.</b></li>
+  <li><b>In dry regions</b> (average rainfall under 250 mm, or 10 inches, a year: most of the desert and the southern
+  San Joaquin Valley floor) <b>only real rivers count</b>: those draining at least 100 km² (like the Mojave River) or
+  carrying an average of at least 10 cubic feet a second, which includes rivers fed by mountain snowmelt (like the
+  Kern and Owens). Small desert washes rarely run, and on flat desert ground they made huge areas look risky.</li>
+  <li><b>Flat basins that drain to no stream</b> (such as the Imperial Valley floor) are left to the official flood
+  zones, since there is no channel to measure height above.</li>
+</ul>
 
 <h3>4. Pick the level</h3>
 <p>A spot gets the highest level that any of the rules above gives it. The outlines are traced like contour lines on
@@ -110,7 +124,8 @@ corridors, these labels follow city lines rather than the land. In Santa Clara C
 
 <h3>Flood insurance claims, 1995–2026 (FEMA)</h3>
 <p>FEMA publishes every flood insurance claim, tagged with its census neighbourhood (a "block group" of a few
-hundred homes). Across the ten counties, 11,289 claims could be placed in a neighbourhood:</p>
+hundred homes), not its address. On the map each neighbourhood with claims is a circle; clicking it outlines the
+neighbourhood, since the claims could have come from anywhere inside it. Across the ten counties, 11,289 claims could be placed in a neighbourhood:</p>
 <table>
   <tr><th>Neighbourhoods by share of land rated Higher or Elevated</th><th>Share of neighbourhoods</th><th>Share of claims</th></tr>
   <tr><td>None of it</td><td>38%</td><td>3% (332 claims)</td></tr>
@@ -129,9 +144,15 @@ fit less well:</p>
 
 <h2>Known limitations</h2>
 <ul>
+  <li><b>Small hillside canyons:</b> water and mud rushing down small canyons in heavy storms (for example in Los
+  Angeles's hillside neighbourhoods in 1998 and 2005) is not shown: the stream data used here leaves out the smallest
+  canyons, and no flood map covers them. Insurance claims there show up on the map as circles in uncoloured areas.</li>
   <li><b>Storm drains:</b> street flooding from overwhelmed storm drains is not modelled by any source used here.
   It can happen anywhere.</li>
-  <li><b>Levees and channels:</b> we rely on FEMA's records of levees. Recent creek improvements may make some
+  <li><b>Desert flash floods:</b> in dry regions, small washes are not counted, so flash floods down desert washes
+  and across alluvial fans (the fan-shaped slopes below desert mountains) are mostly not shown unless an official
+  study mapped them.</li>
+  <li><b>Levees and channels:</b> we rely on FEMA's and the Army Corps' records of levees. Recent creek improvements may make some
   areas safer than shown; failing ones may make them riskier.</li>
   <li><b>Detail:</b> the terrain levels are worked out on a 30 m grid, and creek heights come from 10 m data
   averaged to that grid. Use this map for the neighbourhood picture, not to compare one house with the next.</li>
@@ -139,7 +160,7 @@ fit less well:</p>
   (USGS CoSMoS) is not yet included.</li>
   <li><b>Insurance claims:</b> only insured homes file claims, so more homes may have flooded. The census
   neighbourhood codes on some claims may not match the neighbourhood outlines we used, so a few may be misplaced.</li>
-  <li><b>Coverage:</b> Alameda, Contra Costa, Marin, Napa, San Francisco, San Mateo, Santa Clara, Santa Cruz, Solano and Sonoma counties. Outside them, and over the Bay and ocean, the map shows "No data here yet".</li>
+  <li><b>Coverage:</b> all 58 California counties. Over the ocean, the Bay and large lakes the map shows no data.</li>
 </ul>
 
 <h2>Data sources</h2>
@@ -147,12 +168,17 @@ fit less well:</p>
   <tr><th>Data</th><th>From</th><th>Used for</th></tr>
   <tr><td>Flood hazard zones (National Flood Hazard Layer)</td><td><a href="https://www.fema.gov/flood-maps/national-flood-hazard-layer">FEMA</a></td>
       <td>Studied creek flood zones (Higher), levee areas (Elevated); 500-year and undetermined labels as notes</td></tr>
+  <tr><td>National Levee Database: land each levee protects, and how often it is expected to be overtopped</td><td><a href="https://levees.sec.usace.army.mil/">US Army Corps of Engineers</a></td>
+      <td>Levee-protected land (Elevated, or Higher behind levees overtopped more often than once in 100 years)</td></tr>
+  <tr><td>Average yearly rainfall, 1991–2020</td><td><a href="https://prism.oregonstate.edu/normals/">PRISM, Oregon State University</a></td>
+      <td>Finding dry regions</td></tr>
   <tr><td>Best Available Maps, 2025: preliminary FEMA zones and awareness floodplains</td><td><a href="https://gis.bam.water.ca.gov/">California Department of Water Resources</a></td>
       <td>Upcoming FEMA zones and unstudied streams (Higher)</td></tr>
   <tr><td>Ground elevation, 1/3 arc-second (about 10 m)</td><td><a href="https://www.usgs.gov/3d-elevation-program">USGS 3D Elevation Program</a></td>
       <td>Height above nearby flood zones</td></tr>
   <tr><td>Height Above Nearest Drainage, 10 m</td><td><a href="https://web.corral.tacc.utexas.edu/nfiedata/">National Flood Interoperability Experiment (University of Texas / TACC)</a></td>
-      <td>Height above the nearest creek</td></tr>
+      <td>Height above the nearest creek, which stream each spot drains to, and each stream's drainage area,
+      typical flow and type (from the NHDPlus stream database)</td></tr>
   <tr><td>Historical flood outlines</td><td><a href="https://www.valleywater.org/flooding-safety/flood-ready/historical-flood-reports/2017-coyote-creek-flood">Santa Clara Valley Water District</a></td>
       <td>Past floods and claims on the map, and the checks above</td></tr>
   <tr><td>NFIP Redacted Claims v3</td><td><a href="https://www.fema.gov/openfema-data-page/nfip-redacted-claims-v3">OpenFEMA</a></td>
