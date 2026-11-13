@@ -15,11 +15,12 @@ ATTEMPTS = 20
 SIMPLIFY_DEG = 0.00003  # about 3 m
 
 
-def get_json(url, params, what, attempts=ATTEMPTS):
-    """GET a JSON response, retrying dropped connections with growing waits."""
+def get_json(url, params, what, attempts=ATTEMPTS, post=False):
+    """GET (or POST, for long queries) a JSON response, retrying dropped connections with growing waits."""
     for attempt in range(attempts):
         try:
-            resp = requests.get(url, params=params, timeout=180)
+            resp = (requests.post(url, data=params, timeout=180) if post
+                    else requests.get(url, params=params, timeout=180))
             return resp.json()
         except (requests.RequestException, ValueError) as err:
             print(f"  retry {attempt + 1}/{attempts} {what}: {type(err).__name__}", file=sys.stderr)
@@ -58,6 +59,26 @@ def download_layer(layer_url, bbox, out_path, fields="*", where="1=1"):
         if not batch or (len(batch) < page_size and not more):
             break
         offset += len(batch)
+        time.sleep(PAGE_PAUSE_S)
+    tmp = out_path.with_suffix(".partial")
+    tmp.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    tmp.rename(out_path)  # only a complete download gets the real name
+    return len(features)
+
+
+def download_by_ids(layer_url, id_field, ids, out_path, fields, batch_size=PAGE_SIZE):
+    """Download the features whose `id_field` is one of `ids` (strings), as GeoJSON."""
+    ids = sorted(set(ids))
+    features = []
+    for start in range(0, len(ids), batch_size):
+        batch = ids[start:start + batch_size]
+        page = get_json(f"{layer_url}/query", {
+            "where": f"{id_field} IN ({','.join(repr(i) for i in batch)})", "outFields": fields, "outSR": 4326,
+            "returnGeometry": "true", "f": "geojson", "maxAllowableOffset": SIMPLIFY_DEG, "geometryPrecision": 6,
+        }, f"{id_field} {start}-{start + len(batch)} of {len(ids)}", post=True)
+        if "error" in page:
+            raise RuntimeError(f"server error from {layer_url}: {page['error']}")
+        features.extend(page.get("features", []))
         time.sleep(PAGE_PAUSE_S)
     tmp = out_path.with_suffix(".partial")
     tmp.write_text(json.dumps({"type": "FeatureCollection", "features": features}))

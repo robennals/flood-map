@@ -125,3 +125,25 @@ def test_mudflow_properties_get_a_level_by_storm_size_and_issue():
     for name, shapes in layers.items():
         assert (shapes.expected == name).all(), name
     assert sum(len(shapes) for shapes in layers.values()) == len(listed)
+
+
+def test_primo_parcels_get_a_level_by_depth_and_storm():
+    import geopandas as gpd
+    from shapely.geometry import box
+    from pipeline.model import primo_layers
+
+    deep, shallow, dry = config.PRIMO_DEEP_M + 0.1, (config.PRIMO_SHALLOW_M + config.PRIMO_DEEP_M) / 2, 0.0
+    listed = {  # (depth in the 1-in-20-year storm, in the 1-in-100-year storm) -> expected layer
+        (deep, deep): "primo_elevated",
+        (shallow, deep): "primo_moderate",
+        (dry, deep): "primo_moderate",
+        (dry, shallow): "primo_moderate",
+    }
+    parcels = gpd.GeoDataFrame(
+        [dict(h_20_drain=h20, h_100_drain=h100, expected=expected) for (h20, h100), expected in listed.items()]
+        + [dict(h_20_drain=dry, h_100_drain=dry, expected=None)],
+        geometry=[box(i, 0, i + 1, 1) for i in range(len(listed) + 1)])
+    layers = primo_layers(parcels)
+    for name, shapes in layers.items():
+        assert (shapes.expected == name).all(), name
+    assert sum(len(shapes) for shapes in layers.values()) == len(listed)  # the dry parcel is left out

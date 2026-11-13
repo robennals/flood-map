@@ -14,6 +14,9 @@
 - Properties LA County Public Works expects mud and debris flows from a recent burn area to reach: Higher if the
   property itself is endangered in a small or moderate storm, Elevated if only in a big one, Moderate if only the
   road to it may be blocked (see mudflow_layers).
+- Parcels UC Irvine's PRIMo-Drain model of the Los Angeles basin floods: Elevated if more than PRIMO_DEEP_M deep
+  in its 1-in-20-year storm, Moderate if more than PRIMO_SHALLOW_M deep in its 1-in-100-year storm (see
+  primo_layers).
 - FEMA's 500-year, "undetermined" and "minimal" labels are notes only: outside studied creek
   corridors they follow city lines, not the land.
 
@@ -109,7 +112,9 @@ def _read_shapes(path):
     return shapes[shapes.geometry.notna()]
 
 
-MUDFLOW_LEVELS = {"mudflow_higher": HIGHER, "mudflow_elevated": ELEVATED, "mudflow_moderate": MODERATE}
+# Layers of individual properties, and the level each gives
+PROPERTY_LEVELS = {"mudflow_higher": HIGHER, "mudflow_elevated": ELEVATED, "mudflow_moderate": MODERATE,
+                   "primo_elevated": ELEVATED, "primo_moderate": MODERATE}
 
 
 def mudflow_layers(properties):
@@ -126,6 +131,29 @@ def mudflow_layers(properties):
     late = safety("PHASE3") & ~early
     return {"mudflow_higher": properties[early], "mudflow_elevated": properties[late],
             "mudflow_moderate": properties[~early & ~late]}
+
+
+def primo_layers(parcels):
+    """Split parcels by PRIMo-Drain flood depth (columns h_20_drain and h_100_drain, in metres) into map layers.
+
+    Deeper than PRIMO_DEEP_M in the 1-in-20-year storm is Elevated, and deeper than PRIMO_SHALLOW_M in the
+    1-in-100-year storm Moderate. Drier parcels are left out. The levels match flood insurance claims: in Los Angeles
+    neighbourhoods, these parcels go with claim rates like our Elevated and Moderate land, well below official
+    100-year zones.
+    """
+    elevated = parcels.h_20_drain > config.PRIMO_DEEP_M
+    moderate = ~elevated & (parcels.h_100_drain > config.PRIMO_SHALLOW_M)
+    return {"primo_elevated": parcels[elevated], "primo_moderate": parcels[moderate]}
+
+
+def _primo_parcels(raw):
+    """Outlines of the parcels PRIMo-Drain floods, with their depths, or None where there are none."""
+    path = raw / "primo_parcels.geojson"
+    if not (path.exists() and config.PRIMO_DEPTHS.exists()):
+        return None
+    depths = gpd.pd.read_csv(config.PRIMO_DEPTHS, usecols=["apn", "h_20_drain", "h_100_drain"])
+    depths["AIN"] = depths.apn.str.replace("-", "")
+    return _read_shapes(path).merge(depths.drop(columns="apn"), on="AIN")
 
 
 def _land_outline(fips):
@@ -226,6 +254,9 @@ def run(region, fips, county_name):
     }
     if (raw / "mudflow_properties.geojson").exists():
         source_layers.update(mudflow_layers(_read_shapes(raw / "mudflow_properties.geojson")))
+    primo_parcels = _primo_parcels(raw)
+    if primo_parcels is not None:
+        source_layers.update(primo_layers(primo_parcels))
     studied_zone = (burn(source_layers["fema_high"].geometry) | burn(source_layers["prelim_high"].geometry)
                     | burn(source_layers["dwr_awareness"].geometry))
     level, elevated_score, moderate_score = classify(
@@ -233,7 +264,7 @@ def run(region, fips, county_name):
         _height_above_creek(region, shape, transform), transform.a,
         levee_often_overtopped=burn(source_layers["levee_often_overtopped"].geometry),
         creek_ignored=_channel_ignored(region, shape, transform))
-    for name, value in MUDFLOW_LEVELS.items():
+    for name, value in PROPERTY_LEVELS.items():
         if name in source_layers:  # properties are smaller than a grid cell, so count every cell they touch
             level = np.where(burn(source_layers[name].geometry, all_touched=True), np.maximum(level, value), level)
 

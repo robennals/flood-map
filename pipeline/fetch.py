@@ -13,7 +13,7 @@ import geopandas as gpd
 import requests
 
 from . import config
-from .arcgis import download_layer, get_json
+from .arcgis import download_by_ids, download_layer, get_json
 
 
 # Remote elevation tiles are read over HTTP; retry dropped connections instead of skipping a tile
@@ -96,8 +96,24 @@ def fetch_county(fips):
         claims_path.write_text(json.dumps(rows))
         log(f"  {fips} claims: {len(rows)}")
 
+    if fips == config.LA_COUNTY:
+        fetch_primo_parcels(raw / "primo_parcels.geojson")
+
     download_file(config.TIGER_BLOCK_GROUPS.format(fips=fips), raw / f"tl_2010_{fips}_bg10.zip")
     download_file(config.TIGER_WATER.format(fips=fips), raw / "water.zip")
+
+
+def fetch_primo_parcels(path):
+    """Outlines of the parcels PRIMo-Drain floods (config.PRIMO_DATASET), from LA County's parcel map."""
+    if path.exists():
+        return
+    if not config.PRIMO_DEPTHS.exists():
+        log(f"  PRIMo-Drain depths not found: download {config.PRIMO_DEPTHS.name} from {config.PRIMO_DATASET} into {config.PRIMO_DIR}")
+        return
+    depths = gpd.pd.read_csv(config.PRIMO_DEPTHS)
+    flooded = depths[(depths.h_100_drain > config.PRIMO_SHALLOW_M) | (depths.h_20_drain > config.PRIMO_DEEP_M)]
+    parcel_numbers = flooded.apn.str.replace("-", "")  # the county's AIN is the APN without dashes
+    log(f"  PRIMo-Drain parcels: {download_by_ids(config.LA_PARCELS, 'AIN', parcel_numbers, path, 'AIN')} shapes")
 
 
 def county_bounds(fips_list):
