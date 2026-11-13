@@ -11,6 +11,9 @@
   only rivers that drain a large area or carry snowmelt (see the channel settings in config.py).
 - Land a levee protects (from FEMA or the Army Corps National Levee Database) is Elevated, or Higher if the
   Army Corps expects the levee to be overtopped more often than the 100-year standard (LEVEE_HIGHER_OVERTOPPING).
+- Properties LA County Public Works expects mud and debris flows from a recent burn area to reach: Higher if the
+  property itself is endangered in a small or moderate storm, Elevated if only in a big one, Moderate if only the
+  road to it may be blocked (see mudflow_layers).
 - FEMA's 500-year, "undetermined" and "minimal" labels are notes only: outside studied creek
   corridors they follow city lines, not the land.
 
@@ -106,6 +109,25 @@ def _read_shapes(path):
     return shapes[shapes.geometry.notna()]
 
 
+MUDFLOW_LEVELS = {"mudflow_higher": HIGHER, "mudflow_elevated": ELEVATED, "mudflow_moderate": MODERATE}
+
+
+def mudflow_layers(properties):
+    """Split LA County's list of properties mud flows could reach (config.LA_MUDFLOW_PROPERTIES) into map layers.
+
+    Each property is listed at the first storm size ("phase") that reaches it. A "Safety Issue" in phase 1 or 2
+    (small or moderate storms) is Higher, a "Safety Issue" only in phase 3 (big storms) is Elevated, and an
+    "Access Issue" (the road may be blocked, but the property itself isn't expected to be hit) is Moderate.
+    """
+    def safety(phase):
+        return properties[phase].fillna("").str.startswith("Safety")
+
+    early = safety("PHASE1") | safety("PHASE2")
+    late = safety("PHASE3") & ~early
+    return {"mudflow_higher": properties[early], "mudflow_elevated": properties[late],
+            "mudflow_moderate": properties[~early & ~late]}
+
+
 def _land_outline(fips):
     """The county's outline minus large water bodies (county outlines include their share of the Bay and ocean)."""
     raw = config.county_raw(fips)
@@ -180,11 +202,12 @@ def run(region, fips, county_name):
     ground_m, transform = _ground_elevation(region, fips, land)
     shape = ground_m.shape
 
-    def burn(shapes):
+    def burn(shapes, all_touched=False):
         shapes = [s for s in shapes if s is not None and not s.is_empty]
         if not shapes:
             return np.zeros(shape, dtype=bool)
-        return rasterize(((s, 1) for s in shapes), out_shape=shape, transform=transform, dtype="uint8") > 0
+        return rasterize(((s, 1) for s in shapes), out_shape=shape, transform=transform, dtype="uint8",
+                         all_touched=all_touched) > 0
 
     fema = _read_shapes(raw / "fema_zones.geojson")
     leveed = _read_shapes(raw / "nld_leveed_areas.geojson")
@@ -201,6 +224,8 @@ def run(region, fips, county_name):
                                         _read_shapes(raw / "bam_14.geojson")]),
         "undetermined": fema[zone == "D"],
     }
+    if (raw / "mudflow_properties.geojson").exists():
+        source_layers.update(mudflow_layers(_read_shapes(raw / "mudflow_properties.geojson")))
     studied_zone = (burn(source_layers["fema_high"].geometry) | burn(source_layers["prelim_high"].geometry)
                     | burn(source_layers["dwr_awareness"].geometry))
     level, elevated_score, moderate_score = classify(
@@ -208,6 +233,9 @@ def run(region, fips, county_name):
         _height_above_creek(region, shape, transform), transform.a,
         levee_often_overtopped=burn(source_layers["levee_often_overtopped"].geometry),
         creek_ignored=_channel_ignored(region, shape, transform))
+    for name, value in MUDFLOW_LEVELS.items():
+        if name in source_layers:  # properties are smaller than a grid cell, so count every cell they touch
+            level = np.where(burn(source_layers[name].geometry, all_touched=True), np.maximum(level, value), level)
 
     on_land = burn([land])
     with rasterio.open(work / "level.tif", "w", driver="GTiff", width=shape[1], height=shape[0], count=1,
