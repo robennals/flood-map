@@ -1,1 +1,1 @@
-"""Flood map data pipeline. See README.md."""
+"""Flood risk map data pipeline. See README.md."""

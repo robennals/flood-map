@@ -1,4 +1,4 @@
-# Flood map: "How worried should I be about flooding?"
+# California Flood Risk Map: "How worried should I be about flooding?"
 
 A free website where someone types their address and sees how worried to be about flooding where they
 live: a colour-coded map with a one-line reason for any spot, plus a page on what to do about it. It
