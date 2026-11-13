@@ -77,9 +77,9 @@ const LEVELS = {
   4: { name: "Higher", color: "#b91c1c",
        meaning: "Inside a flood zone that an official study expects to flood about once in 100 years or more often: FEMA's current or upcoming maps, or California's maps of streams FEMA never studied. In Los Angeles County, also homes the county expects mud and debris flows from a recent burn area to reach in a small or moderate storm." },
   3: { name: "Elevated", color: "#f97316",
-       meaning: "Low ground: less than about 1 m (3 ft) above the flood level of a nearby high-risk zone, or less than 1.5 m (5 ft) above the nearest creek or river. Also land protected by levees: it floods only if a levee is overtopped or fails, but then flooding can be sudden and deep. In Los Angeles County, also homes mud flows from a recent burn area could reach in a big storm." },
+       meaning: "Low ground: less than about 1 m (3 ft) above the flood level of a nearby high-risk zone, or less than 1.5 m (5 ft) above the nearest creek or river. Also land protected by levees: it floods only if a levee is overtopped or fails, but then flooding can be sudden and deep. In Los Angeles County, also homes mud flows from a recent burn area could reach in a big storm, and properties UC Irvine's flood model of the Los Angeles basin floods more than 30 cm (1 ft) deep in a storm expected about once in 20 years." },
   2: { name: "Moderate", color: "#fcd34d",
-       meaning: "Fairly low ground: less than about 3 m (10 ft) above the flood level of a nearby high-risk zone, or less than 4 m (13 ft) above the nearest creek or river. In Los Angeles County, also homes whose road mud flows from a recent burn area could block." },
+       meaning: "Fairly low ground: less than about 3 m (10 ft) above the flood level of a nearby high-risk zone, or less than 4 m (13 ft) above the nearest creek or river. In Los Angeles County, also homes whose road mud flows from a recent burn area could block, and properties UC Irvine's model floods more than 10 cm (4 in) deep in a 100-year storm." },
   1: { name: "Lower", color: "#f1f5f9",
        meaning: "None of the above. Lower is not no risk: heavy rain can overwhelm storm drains on any street." },
 };
@@ -101,8 +101,10 @@ const SOURCES = [
   ["levee_often_overtopped", 4, "Protected by a levee that the Army Corps of Engineers expects to be overtopped more often than once in 100 years."],
   ["levee", 3, "Protected by a levee. It floods only if the levee is overtopped or fails, but then flooding can be sudden and deep."],
   ["mudflow_elevated", 3, "LA County warns that mud and debris flows from a recent burn area could endanger this property in a big storm."],
+  ["primo_elevated", 3, "UC Irvine's flood model of the Los Angeles basin, which includes the storm drains, floods this property more than 30 cm (1 ft) deep in a storm expected about once in 20 years."],
   ["terrain_elevated", 3, "Low ground near a flood zone, creek or river."],
   ["mudflow_moderate", 2, "LA County warns that mud and debris flows from a recent burn area could block the road to this property."],
+  ["primo_moderate", 2, "UC Irvine's flood model of the Los Angeles basin, which includes the storm drains, floods this property more than 10 cm (4 in) deep in a 100-year storm."],
   ["terrain_moderate", 2, "A few metres above a nearby flood zone, creek or river."],
 ];
 const COLORS = { 4: "#b91c1c", 3: "#f97316", 2: "#fcd34d" };

@@ -50,6 +50,7 @@ MAP_LAYERS = {
     "terrain_elevated": 5, "terrain_moderate": 7, "coverage": 5,
     # Individual properties: too small to see before zoom 9
     "mudflow_higher": 9, "mudflow_elevated": 9, "mudflow_moderate": 9,
+    "primo_elevated": 9, "primo_moderate": 9,
 }
 
 # Downloads stop before free disk space would fall below this
@@ -125,6 +126,17 @@ VALLEY_WATER_COUNTY = "06085"
 LA_MUDFLOW_PROPERTIES = ("https://dpw.gis.lacounty.gov/dpw/rest/services/PostFireDebrisFlowHazards/"
                          "FeatureServer/34")  # "Vulnerable Properties (Last 5 Years)"
 LA_COUNTY = "06037"
+
+# UC Irvine's PRIMo-Drain flood model of the Los Angeles basin (Schubert, Mach and Sanders 2024), which simulates
+# rain, rivers, the ocean and the storm drains together. Its flood depth for every parcel, in metres, is published
+# on Dryad (public domain, CC0), which blocks scripted downloads: download primo_flooddepth_table.csv from PRIMO_DATASET
+# into PRIMO_DIR by hand. Without them the map is built without this layer.
+PRIMO_DATASET = "https://datadryad.org/dataset/doi:10.5061/dryad.kd51c5bcz"
+PRIMO_DIR = RAW / "primo"
+PRIMO_DEPTHS = PRIMO_DIR / "primo_flooddepth_table.csv"
+PRIMO_DEEP_M = 0.3  # deeper than this in the 1-in-20-year storm is Elevated
+PRIMO_SHALLOW_M = 0.1  # deeper than this in the 1-in-100-year storm is Moderate
+LA_PARCELS = "https://public.gis.lacounty.gov/public/rest/services/LACounty_Cache/LACounty_Parcel/MapServer/0"
 
 
 def county_raw(fips):

@@ -62,6 +62,11 @@ Use `REGION=<name>` to pick a region defined in [pipeline/config.py](pipeline/co
 (default `bay-area`). To add a region, add its county FIPS codes there; the download step works out
 which river basins and elevation tiles it needs from the county outlines.
 
+**One manual download, for Los Angeles County.** UC Irvine's PRIMo-Drain flood depths are published on
+[Dryad](https://datadryad.org/dataset/doi:10.5061/dryad.kd51c5bcz), which blocks scripted downloads. Download
+`primo_flooddepth_table.csv` (115 MB) there into `data/raw/primo/` before `make fetch`. Without
+them, everything still builds; the map just leaves out that layer.
+
 **Expect slow downloads.** FEMA's map service is busy and often drops connections. The downloader
 uses small pages and retries; a full Bay Area fetch takes a while.
 
@@ -77,6 +82,8 @@ uses small pages and retries; a full Bay Area fetch takes a while.
 | Census block groups, county outlines | US Census Bureau |
 | Levee-protected land and overtopping chances | US Army Corps of Engineers National Levee Database |
 | Properties mud flows from recent burn areas could reach (Los Angeles County) | Los Angeles County Public Works, post-fire debris flow hazards |
+| Flood depth for every parcel in the Los Angeles basin (PRIMo-Drain) | UC Irvine (Schubert, Mach and Sanders 2024), via Dryad: downloaded by hand |
+| Parcel outlines (Los Angeles County) | Los Angeles County parcel map service |
 | Average yearly rainfall, 1991–2020 | PRISM, Oregon State University |
 | Historical flood outlines (Santa Clara County) | Santa Clara Valley Water District |
 

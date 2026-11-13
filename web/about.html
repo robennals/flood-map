@@ -35,8 +35,10 @@ If you spot a mistake or have a question, email me at <a href="mailto:rob.ennals
 <div class="summary">
   <p><b>In short:</b> we start from the creek flood zones that FEMA and California's water agency have actually
   studied. Everywhere else, we judge risk from the shape of the land: how far each spot sits above those flood
-  zones and above the nearest creek. We checked the result against real floods (Coyote Creek 2017, San Francisquito
-  Creek 1998 and 2023, and others) and against 30 years of flood insurance claims.</p>
+  zones and above the nearest creek. In Los Angeles County we add two more expert sources: the county's list of
+  properties below recent burn areas that mud and debris flows could reach, and UC Irvine's detailed flood model of
+  the Los Angeles basin, which includes the storm drains. We checked the result against real floods (Coyote Creek
+  2017, San Francisquito Creek 1998 and 2023, and others) and against 30 years of flood insurance claims.</p>
   <p><b>This is not an official government flood report.</b> It is something I have personally created, based on my own personal interpretation of the best data I could find. For insurance or building decisions, use <a href="https://msc.fema.gov/portal/home">FEMA's official maps</a>.</p>
 </div>
 
@@ -54,11 +56,13 @@ If you spot a mistake or have a question, email me at <a href="mailto:rob.ennals
       1.5 m (5 ft) above the nearest creek. Also land protected by a levee (from FEMA's maps or the Army Corps'
       National Levee Database): the levee keeps it dry in most floods, but it floods if the levee is overtopped or
       fails, and then the flooding can be sudden and deep. In Los Angeles County, also properties mud flows from a
-      recent burn area could endanger in a big storm.</td></tr>
+      recent burn area could endanger in a big storm, and properties UC Irvine's flood model of the Los Angeles basin
+      floods more than 30 cm (1 ft) deep in a storm expected about once in 20 years.</td></tr>
   <tr><td><span class="swatch" style="background:#fcd34d"></span><b>Moderate</b></td>
       <td>Fairly low ground: less than about 3 m (10 ft) above the flood level of a nearby high-risk zone, or less
       than 4 m (13 ft) above the nearest creek. In Los Angeles County, also properties whose road mud flows from a
-      recent burn area could block.</td></tr>
+      recent burn area could block, and properties UC Irvine's model floods more than 10 cm (4 in) deep in a 100-year
+      storm.</td></tr>
   <tr><td><span class="swatch" style="background:#f1f5f9;border:1px solid #cbd5e1"></span><b>Lower</b></td>
       <td>None of the above. <b>Lower is not no risk:</b> blocked storm drains and heavy rain can flood any street.</td></tr>
 </table>
@@ -116,7 +120,28 @@ flows from burn areas of the last five years could reach, and notes the storm si
 you live below a recent burn area anywhere in California, check your county's warnings whenever heavy rain is
 forecast.</p>
 
-<h3>5. Pick the level</h3>
+<h3>5. Add UC Irvine's flood model of the Los Angeles basin</h3>
+<p>Most of Los Angeles's flood insurance claims don't come from the creek and river zones above. Much of the basin's
+flooding happens when heavy rain overwhelms the storm drains, or water runs down the streets from the hills. A team at
+UC Irvine led by Prof. Brett Sanders built a detailed computer model of the Los Angeles basin, PRIMo-Drain. Working on a
+3 m (10 ft) grid, it rains on the whole city, sends the water through the storm drains, rivers and channels, and
+tracks where it collects, together with high tides and storm surge at the coast. They published the flood depth it predicts for
+every land parcel (about 1.8 million) in a 100-year storm and a storm expected about once in 20 years. We use those
+depths for each parcel:</p>
+<ul>
+  <li><b>Elevated:</b> more than 30 cm (1 ft) deep in the storm expected about once in 20 years.</li>
+  <li><b>Moderate:</b> more than 10 cm (4 in) deep in the 100-year storm.</li>
+</ul>
+<p>These cut-offs and levels come from checking the model against flood insurance claims. Neighbourhoods with a
+parcel flooded more than 30 cm deep in the 20-year storm averaged 1.23 claims since 1995, eight times the 0.15 of
+neighbourhoods the model keeps dry; shallower flooding in the 100-year storm was a weaker but real signal (0.44).
+Even so, these neighbourhoods have far fewer claims than those in FEMA's 100-year zones, about as many as our other
+Elevated and Moderate land, so that's how we rate them. Claims are only used for this calibration; everything else
+in this method is set without them. The model covers the urban basin, from the coast to the foot of the San Gabriel Mountains (84
+of the county's 88 cities), but not the Antelope Valley, Malibu or Catalina Island. Like the mud-flow list, it shows up
+as individual properties when you zoom in.</p>
+
+<h3>6. Pick the level</h3>
 <p>A spot gets the highest level that any of the rules above gives it. The outlines are traced like contour lines on
 a hiking map, so they follow the land rather than a grid of squares.</p>
 
@@ -132,7 +157,8 @@ corridors, these labels follow city lines rather than the land. In Santa Clara C
 "Why" list but let the terrain decide the level.</p>
 
 <h2>Checking it against real floods</h2>
-<p>None of the historical data below is used to set the levels, so it is a fair test.</p>
+<p>None of the historical data below is used to set the levels, so it is a fair test. The one exception is choosing
+which level UC Irvine's Los Angeles model maps to (step 5), which used the Los Angeles claims.</p>
 
 <h3>Real flood outlines (Santa Clara Valley Water District)</h3>
 <table>
@@ -152,17 +178,18 @@ neighbourhood, since the claims could have come from anywhere inside it. Across 
 be placed in a neighbourhood, and the claims rate rises steadily with the share of a neighbourhood the map flags:</p>
 <table>
   <tr><th>Neighbourhoods by share of land rated Higher or Elevated</th><th>Share of neighbourhoods</th><th>Share of claims</th><th>Claims per neighbourhood</th></tr>
-  <tr><td>None of it</td><td>39%</td><td>8% (2,532 claims)</td><td>0.28</td></tr>
-  <tr><td>Under 10%</td><td>23%</td><td>25%</td><td>1.53</td></tr>
-  <tr><td>10–30%</td><td>13%</td><td>18%</td><td>2.03</td></tr>
-  <tr><td>More than 30%</td><td>26%</td><td>50% (16,424 claims)</td><td>2.75</td></tr>
+  <tr><td>None of it</td><td>35%</td><td>5% (1,615 claims)</td><td>0.20</td></tr>
+  <tr><td>Under 10%</td><td>26%</td><td>27%</td><td>1.48</td></tr>
+  <tr><td>10–30%</td><td>13%</td><td>18%</td><td>1.94</td></tr>
+  <tr><td>More than 30%</td><td>26%</td><td>50% (16,449 claims)</td><td>2.74</td></tr>
 </table>
 <p>In 36 of the 38 counties with enough claims to judge, neighbourhoods with flagged land have more than twice the
 claims of those without. Where the fit is weaker:</p>
 <ul>
-  <li><b>Los Angeles:</b> a third of its claims (1,472 of 4,416) come from neighbourhoods the map doesn't flag,
-  mostly in the hills, where water and mud rush down small canyons in heavy storms, and from storm drains. Its most
-  flagged neighbourhoods are largely on the levee-protected plain, where the levees have kept claims low. Below
+  <li><b>Los Angeles:</b> before we added UC Irvine's model, a third of its claims (1,472 of 4,416) came from
+  neighbourhoods the map didn't flag; now 13% (555) do, mostly in hillside canyons. Its most flagged neighbourhoods
+  are largely on the levee-protected plain, where the levees have kept claims low: neighbourhoods with levee-protected
+  land average 0.29 claims, against 2.4 in those with FEMA's 100-year zones. Below
   recent burn areas the county's mud-flow list fits the claims well: the 34 neighbourhoods with a property rated
   Higher on it averaged 13.7 claims each, 20 times the county average, and 428 of their 466 claims came before the
   fires behind the list. Those canyons flooded long before they burned.</li>
@@ -180,8 +207,8 @@ claims of those without. Where the fit is weaker:</p>
   Angeles's hillside neighbourhoods in 1998 and 2005) is only shown below burn areas of the last five years in Los
   Angeles County. Elsewhere, the stream data used here leaves out the smallest canyons, and no flood map covers
   them. Insurance claims there show up on the map as circles in uncoloured areas.</li>
-  <li><b>Storm drains:</b> street flooding from overwhelmed storm drains is not modelled by any source used here.
-  It can happen anywhere.</li>
+  <li><b>Storm drains:</b> street flooding from overwhelmed storm drains is only modelled in the Los Angeles basin,
+  by UC Irvine's model. Elsewhere it can happen on any street.</li>
   <li><b>Desert flash floods:</b> in dry regions, small washes are not counted, so flash floods down desert washes
   and across alluvial fans (the fan-shaped slopes below desert mountains) are mostly not shown unless an official
   study mapped them.</li>
@@ -206,6 +233,12 @@ claims of those without. Where the fit is weaker:</p>
   <tr><td>Post-fire debris flow hazards: properties mud and debris flows from burn areas of the last five years could reach</td>
       <td><a href="https://apps.gis.lacounty.gov/Geocortex/Essentials/GISVIEWER/REST/sites/PostFire_Debris_Flow_Hazards_Map_Public">Los Angeles County Public Works</a></td>
       <td>Mud-flow risk in Los Angeles County (Higher, Elevated or Moderate)</td></tr>
+  <tr><td>PRIMo-Drain flood depths for every parcel in the Los Angeles basin, 100-year and 20-year storms
+      (Schubert, Mach and Sanders, <a href="https://doi.org/10.1029/2024EF004549">Earth's Future, 2024</a>)</td>
+      <td><a href="https://datadryad.org/dataset/doi:10.5061/dryad.kd51c5bcz">UC Irvine, via Dryad</a> (public domain)</td>
+      <td>Rain, storm drain and coastal flooding in the Los Angeles basin (Higher, Elevated or Moderate)</td></tr>
+  <tr><td>Parcel outlines</td><td><a href="https://egis-lacounty.hub.arcgis.com/">Los Angeles County</a></td>
+      <td>Drawing the parcels UC Irvine's model floods</td></tr>
   <tr><td>Average yearly rainfall, 1991–2020</td><td><a href="https://prism.oregonstate.edu/normals/">PRISM, Oregon State University</a></td>
       <td>Finding dry regions</td></tr>
   <tr><td>Best Available Maps, 2025: preliminary FEMA zones and awareness floodplains</td><td><a href="https://gis.bam.water.ca.gov/">California Department of Water Resources</a></td>
