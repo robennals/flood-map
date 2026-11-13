@@ -154,8 +154,11 @@ map.on("load", () => {
   // Solid fills go under the basemap's roads so streets stay readable
   const underStreets = "tunnel_motorway_casing";
   // Free elevation tiles (AWS Open Data "Terrain Tiles"), used for hill shading and 3D
+  // These tiles are uncompressible elevation images and were most of the page's downloads, so: each tile is drawn
+  // at double size (512) so a quarter as many are fetched, and detail stops at zoom 10, beyond which the map
+  // stretches them. Gentle hill shading doesn't need street-level elevation.
   const dem = { type: "raster-dem", tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
-                encoding: "terrarium", tileSize: 256, maxzoom: 15,
+                encoding: "terrarium", tileSize: 512, maxzoom: 10,
                 attribution: "Elevation: <a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>" };
   map.addSource("dem", dem);
   map.addSource("dem3d", dem);  // MapLibre recommends a separate source for 3D terrain
