@@ -1,4 +1,4 @@
-# Rebuild the flood map from public data. See README.md.
+# Rebuild the flood risk map from public data. See README.md.
 REGION ?= bay-area
 PYTHON := uv run --quiet python
 
