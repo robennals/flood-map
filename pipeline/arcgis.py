@@ -15,7 +15,8 @@ ATTEMPTS = 20
 SIMPLIFY_DEG = 0.00003  # about 3 m
 
 
-def _get(url, params, what, attempts=ATTEMPTS):
+def get_json(url, params, what, attempts=ATTEMPTS):
+    """GET a JSON response, retrying dropped connections with growing waits."""
     for attempt in range(attempts):
         try:
             resp = requests.get(url, params=params, timeout=180)
@@ -28,7 +29,7 @@ def _get(url, params, what, attempts=ATTEMPTS):
 
 def download_layer(layer_url, bbox, out_path, fields="*", where="1=1"):
     """bbox is (minx, miny, maxx, maxy) in longitude/latitude. Writes a GeoJSON FeatureCollection."""
-    info = _get(layer_url, {"f": "json"}, "layer info")
+    info = get_json(layer_url, {"f": "json"}, "layer info")
     page_size = min(info.get("maxRecordCount", 1000), PAGE_SIZE)
     params = {
         "where": where, "geometry": ",".join(str(v) for v in bbox), "geometryType": "esriGeometryEnvelope",
@@ -42,7 +43,7 @@ def download_layer(layer_url, bbox, out_path, fields="*", where="1=1"):
         # Busy servers tend to drop large responses, so after repeated failures ask for fewer shapes at a time
         while True:
             try:
-                page = _get(f"{layer_url}/query", {**params, "resultOffset": offset, "resultRecordCount": page_size},
+                page = get_json(f"{layer_url}/query", {**params, "resultOffset": offset, "resultRecordCount": page_size},
                             f"features from {offset} ({page_size} per page)", attempts=3 if page_size > 25 else ATTEMPTS)
                 break
             except RuntimeError:

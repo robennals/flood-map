@@ -3,5 +3,5 @@
 // which `make build` fills for testing.
 window.FLOOD_MAP_CONFIG = {
   dataUrl: "https://floodmap-data.ennals.org",
-  region: "bay-area",
+  region: "california",
 };

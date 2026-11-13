@@ -83,3 +83,24 @@ def test_unknown_elevation_and_creek_height_count_as_safe_ground():
     level, elevated_score, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M)
     assert (level[:, 150:] == LOWER).all()
     assert np.isfinite(elevated_score[:, :150]).all()
+
+
+def test_levees_often_overtopped_are_higher():
+    ground_m, zone, levee, above_creek_m = grid()
+    levee[:, 150:] = True
+    often = np.zeros_like(levee)
+    often[:, 180:] = True  # this levee is overtopped more often than the 100-year standard
+    level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, levee_often_overtopped=often)
+    assert (level[:, 150:180] == ELEVATED).all()
+    assert (level[:, 180:] == HIGHER).all()
+
+
+def test_ignored_channels_do_not_count_for_the_creek_rule():
+    ground_m, zone, levee, above_creek_m = grid()
+    zone[:] = False
+    above_creek_m[:, 100:] = 1.0  # low ground beside a channel everywhere east of column 100
+    ignored = np.zeros_like(levee)
+    ignored[:, 150:] = True  # from column 150 on the channel is a canal or a small dry-region wash
+    level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, creek_ignored=ignored)
+    assert (level[:, 100:150] == ELEVATED).all()
+    assert (level[:, 150:] == LOWER).all()

@@ -2,7 +2,7 @@
 
 A free website where someone types their address and sees how worried to be about flooding where they
 live: a colour-coded map with a one-line reason for any spot, plus a page on what to do about it. It
-currently covers the nine San Francisco Bay Area counties and Santa Cruz County.
+covers all of California.
 
 - **What it shows:** four levels (Higher, Elevated, Moderate, Lower) built from FEMA's and California's
   studied creek flood zones plus the shape of the land, with past floods and flood insurance claims
@@ -32,7 +32,7 @@ public data ──make fetch──▶ data/raw/ ──make build──▶ data/o
 ### 1. Install the tools
 
 You need [uv](https://docs.astral.sh/uv/) (Python), [GDAL](https://gdal.org/) command-line tools,
-[tippecanoe](https://github.com/felt/tippecanoe), `curl`, and Node.js (only for `make serve`).
+[tippecanoe](https://github.com/felt/tippecanoe) and `curl`.
 
 ```bash
 # macOS
@@ -75,6 +75,8 @@ uses small pages and retries; a full Bay Area fetch takes a while.
 | Ground elevation, 10 m | USGS 3D Elevation Program (read remotely, not downloaded in full) |
 | Flood insurance claims | OpenFEMA NFIP Redacted Claims v3 |
 | Census block groups, county outlines | US Census Bureau |
+| Levee-protected land and overtopping chances | US Army Corps of Engineers National Levee Database |
+| Average yearly rainfall, 1991–2020 | PRISM, Oregon State University |
 | Historical flood outlines (Santa Clara County) | Santa Clara Valley Water District |
 
 ### 3. Publish
@@ -105,7 +107,11 @@ The website reads its map files from the address in [web/config.js](web/config.j
 - **Higher:** inside a studied 1% (100-year) flood zone: FEMA's current or preliminary maps, or a DWR
   awareness floodplain.
 - **Elevated / Moderate:** graded by the land. How high a spot sits above the nearest large flood
-  zone (plus a distance penalty), and above the nearest creek. Levee-protected land is Elevated.
+  zone (plus a distance penalty), and above the nearest creek. Only real streams count for the creek
+  part: never canals or pipelines, and in dry regions (under 250 mm of rain a year) only rivers that drain
+  a large area or carry snowmelt.
+- **Levees:** land a levee protects is Elevated, or Higher if the Army Corps expects the levee to be
+  overtopped more often than once in 100 years.
 - **Not used to set levels:** FEMA's 500-year, "minimal" and "undetermined" labels. Outside studied
   creek corridors they follow city lines rather than the land (for example, 92% of Saratoga is
   labelled 500-year but 96% of neighbouring Monte Sereno is labelled minimal).

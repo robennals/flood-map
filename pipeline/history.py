@@ -38,12 +38,16 @@ def write_layers(counties, out_path):
             block_groups = gpd.read_file(f"zip://{raw}/tl_2010_{fips}_bg10.zip")
             block_groups = block_groups[block_groups.GEOID10.isin(years_by_block_group)].to_crs(config.CRS)
             middles = gpd.GeoSeries(block_groups.geometry.representative_point(), crs=config.CRS).to_crs(4326)
-            for geoid, middle in zip(block_groups.GEOID10, middles):
+            # The neighbourhood's outline, shown when its circle is clicked: the claims could be anywhere in it
+            outlines = block_groups.geometry.simplify(20).to_crs(4326)
+            for geoid, middle, outline in zip(block_groups.GEOID10, middles, outlines):
                 years = years_by_block_group[geoid]
                 placed += sum(years.values())
                 out.write(json.dumps({"type": "Feature", "tippecanoe": {"layer": "claims"},
-                                      "properties": {"claims": sum(years.values()),
+                                      "properties": {"geoid": geoid, "claims": sum(years.values()),
                                                      "years": ", ".join(f"{y} ({n})" if n > 1 else str(y)
                                                                         for y, n in sorted(years.items()))},
                                       "geometry": middle.__geo_interface__}) + "\n")
+                out.write(json.dumps({"type": "Feature", "tippecanoe": {"layer": "claim_areas"},
+                                      "properties": {"geoid": geoid}, "geometry": outline.__geo_interface__}) + "\n")
     return placed, total

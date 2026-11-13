@@ -66,6 +66,8 @@ def check_county(fips):
 def main(region):
     report = {}
     for fips, name in config.REGIONS[region].items():
+        if not (config.county_work(fips) / "level.tif").exists():
+            continue  # not modelled yet
         result = check_county(fips)
         report[fips] = {"name": name, **result}
         print(f"\n{name} ({fips})   " + "  ".join(f"{k} {v:.0f}%" for k, v in result["county_share"].items()))
