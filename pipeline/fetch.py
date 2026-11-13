@@ -74,6 +74,8 @@ def fetch_county(fips):
     layers = {"fema_zones": (config.FEMA_ZONES, "FLD_ZONE,ZONE_SUBTY,DFIRM_ID")}
     layers.update({name: (f"{config.DWR_BAM}/{num}", "*") for name, num in config.DWR_LAYERS.items()})
     layers["nld_leveed_areas"] = (config.NLD_LEVEED_AREAS, "SYSTEM_NAME,OVERTOPPING_ACE,FEMA_ACCREDITATION_RATING")
+    if fips == config.LA_COUNTY:
+        layers["mudflow_properties"] = (config.LA_MUDFLOW_PROPERTIES, "FIRE,FIRE_YEAR,PHASE1,PHASE2,PHASE3")
     for name, (url, fields) in layers.items():
         path = raw / f"{name}.geojson"
         if not path.exists():

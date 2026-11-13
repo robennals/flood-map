@@ -104,3 +104,24 @@ def test_ignored_channels_do_not_count_for_the_creek_rule():
     level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, creek_ignored=ignored)
     assert (level[:, 100:150] == ELEVATED).all()
     assert (level[:, 150:] == LOWER).all()
+
+
+def test_mudflow_properties_get_a_level_by_storm_size_and_issue():
+    import geopandas as gpd
+    from shapely.geometry import box
+    from pipeline.model import mudflow_layers
+
+    listed = {  # (PHASE1, PHASE2, PHASE3) -> expected layer
+        ("Safety Issue", None, None): "mudflow_higher",
+        (None, "Safety", None): "mudflow_higher",
+        (None, None, "Safety Issue"): "mudflow_elevated",
+        ("Access Issue", None, None): "mudflow_moderate",
+        (None, None, "Access Issue"): "mudflow_moderate",
+    }
+    properties = gpd.GeoDataFrame(
+        [dict(zip(("PHASE1", "PHASE2", "PHASE3"), phases), expected=expected) for phases, expected in listed.items()],
+        geometry=[box(i, 0, i + 1, 1) for i in range(len(listed))])
+    layers = mudflow_layers(properties)
+    for name, shapes in layers.items():
+        assert (shapes.expected == name).all(), name
+    assert sum(len(shapes) for shapes in layers.values()) == len(listed)

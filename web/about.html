@@ -47,15 +47,18 @@ If you spot a mistake or have a question, email me at <a href="mailto:rob.ennals
       <td>Inside a flood zone that an official creek study expects to flood about once in 100 years or more often:
       FEMA's current maps, FEMA's upcoming (preliminary) maps, or California's "awareness" floodplains for streams
       FEMA never studied. Also land behind a levee that the US Army Corps of Engineers expects to be overtopped more
-      often than once in 100 years.</td></tr>
+      often than once in 100 years. In Los Angeles County, also properties the county expects mud and debris flows
+      from a recent burn area to endanger in a small or moderate storm.</td></tr>
   <tr><td><span class="swatch" style="background:#f97316"></span><b>Elevated</b></td>
       <td>Low ground: less than about 1 m (3 ft) above the flood level of a nearby high-risk zone, or less than
       1.5 m (5 ft) above the nearest creek. Also land protected by a levee (from FEMA's maps or the Army Corps'
       National Levee Database): the levee keeps it dry in most floods, but it floods if the levee is overtopped or
-      fails, and then the flooding can be sudden and deep.</td></tr>
+      fails, and then the flooding can be sudden and deep. In Los Angeles County, also properties mud flows from a
+      recent burn area could endanger in a big storm.</td></tr>
   <tr><td><span class="swatch" style="background:#fcd34d"></span><b>Moderate</b></td>
       <td>Fairly low ground: less than about 3 m (10 ft) above the flood level of a nearby high-risk zone, or less
-      than 4 m (13 ft) above the nearest creek.</td></tr>
+      than 4 m (13 ft) above the nearest creek. In Los Angeles County, also properties whose road mud flows from a
+      recent burn area could block.</td></tr>
   <tr><td><span class="swatch" style="background:#f1f5f9;border:1px solid #cbd5e1"></span><b>Lower</b></td>
       <td>None of the above. <b>Lower is not no risk:</b> blocked storm drains and heavy rain can flood any street.</td></tr>
 </table>
@@ -98,7 +101,22 @@ and snowmelt over its whole drainage area), not from the rain where it happens t
   zones, since there is no channel to measure height above.</li>
 </ul>
 
-<h3>4. Pick the level</h3>
+<h3>4. Add mud and debris flows below recent burn areas (Los Angeles County)</h3>
+<p>For several years after a wildfire, heavy rain on the bare slopes can send fast-moving mud, rocks and burned
+trees down the canyons below, and these are often what destroys homes. Flood insurance covers this "mudflow", but
+flood zone maps don't show it. Los Angeles County Public Works keeps a list of the properties that mud and debris
+flows from burn areas of the last five years could reach, and notes the storm size at which each would be reached
+(its <a href="https://dpw.lacounty.gov/wrd/forecast/">mud and debris flow forecast</a> uses the same storm sizes):</p>
+<ul>
+  <li><b>Higher:</b> the property itself could be endangered in a small or moderate storm (phase 1 or 2).</li>
+  <li><b>Elevated:</b> the property itself could be endangered in a big storm (phase 3).</li>
+  <li><b>Moderate:</b> the road to it could be blocked, but the property itself isn't expected to be hit.</li>
+</ul>
+<p>These show up as individual properties when you zoom in. Other counties don't publish a list like this yet. If
+you live below a recent burn area anywhere in California, check your county's warnings whenever heavy rain is
+forecast.</p>
+
+<h3>5. Pick the level</h3>
 <p>A spot gets the highest level that any of the rules above gives it. The outlines are traced like contour lines on
 a hiking map, so they follow the land rather than a grid of squares.</p>
 
@@ -134,7 +152,7 @@ neighbourhood, since the claims could have come from anywhere inside it. Across 
 be placed in a neighbourhood, and the claims rate rises steadily with the share of a neighbourhood the map flags:</p>
 <table>
   <tr><th>Neighbourhoods by share of land rated Higher or Elevated</th><th>Share of neighbourhoods</th><th>Share of claims</th><th>Claims per neighbourhood</th></tr>
-  <tr><td>None of it</td><td>39%</td><td>8% (2,567 claims)</td><td>0.29</td></tr>
+  <tr><td>None of it</td><td>39%</td><td>8% (2,532 claims)</td><td>0.28</td></tr>
   <tr><td>Under 10%</td><td>23%</td><td>25%</td><td>1.53</td></tr>
   <tr><td>10–30%</td><td>13%</td><td>18%</td><td>2.03</td></tr>
   <tr><td>More than 30%</td><td>26%</td><td>50% (16,424 claims)</td><td>2.75</td></tr>
@@ -142,9 +160,12 @@ be placed in a neighbourhood, and the claims rate rises steadily with the share 
 <p>In 36 of the 38 counties with enough claims to judge, neighbourhoods with flagged land have more than twice the
 claims of those without. Where the fit is weaker:</p>
 <ul>
-  <li><b>Los Angeles:</b> a third of its claims (1,507 of 4,416) come from neighbourhoods the map doesn't flag,
+  <li><b>Los Angeles:</b> a third of its claims (1,472 of 4,416) come from neighbourhoods the map doesn't flag,
   mostly in the hills, where water and mud rush down small canyons in heavy storms, and from storm drains. Its most
-  flagged neighbourhoods are largely on the levee-protected plain, where the levees have kept claims low.</li>
+  flagged neighbourhoods are largely on the levee-protected plain, where the levees have kept claims low. Below
+  recent burn areas the county's mud-flow list fits the claims well: the 34 neighbourhoods with a property rated
+  Higher on it averaged 13.7 claims each, 20 times the county average, and 428 of their 466 claims came before the
+  fires behind the list. Those canyons flooded long before they burned.</li>
   <li><b>Alameda</b> has few claims (349) and only a weak pattern, which suggests much of its flooding comes from
   overwhelmed storm drains rather than creeks.</li>
   <li><b>San Francisco</b> has only 19 claims, 16 of them in neighbourhoods the map doesn't flag. This fits
@@ -156,8 +177,9 @@ claims of those without. Where the fit is weaker:</p>
 <h2>Known limitations</h2>
 <ul>
   <li><b>Small hillside canyons:</b> water and mud rushing down small canyons in heavy storms (for example in Los
-  Angeles's hillside neighbourhoods in 1998 and 2005) is not shown: the stream data used here leaves out the smallest
-  canyons, and no flood map covers them. Insurance claims there show up on the map as circles in uncoloured areas.</li>
+  Angeles's hillside neighbourhoods in 1998 and 2005) is only shown below burn areas of the last five years in Los
+  Angeles County. Elsewhere, the stream data used here leaves out the smallest canyons, and no flood map covers
+  them. Insurance claims there show up on the map as circles in uncoloured areas.</li>
   <li><b>Storm drains:</b> street flooding from overwhelmed storm drains is not modelled by any source used here.
   It can happen anywhere.</li>
   <li><b>Desert flash floods:</b> in dry regions, small washes are not counted, so flash floods down desert washes
@@ -181,6 +203,9 @@ claims of those without. Where the fit is weaker:</p>
       <td>Studied creek flood zones (Higher), levee areas (Elevated); 500-year and undetermined labels as notes</td></tr>
   <tr><td>National Levee Database: land each levee protects, and how often it is expected to be overtopped</td><td><a href="https://levees.sec.usace.army.mil/">US Army Corps of Engineers</a></td>
       <td>Levee-protected land (Elevated, or Higher behind levees overtopped more often than once in 100 years)</td></tr>
+  <tr><td>Post-fire debris flow hazards: properties mud and debris flows from burn areas of the last five years could reach</td>
+      <td><a href="https://apps.gis.lacounty.gov/Geocortex/Essentials/GISVIEWER/REST/sites/PostFire_Debris_Flow_Hazards_Map_Public">Los Angeles County Public Works</a></td>
+      <td>Mud-flow risk in Los Angeles County (Higher, Elevated or Moderate)</td></tr>
   <tr><td>Average yearly rainfall, 1991–2020</td><td><a href="https://prism.oregonstate.edu/normals/">PRISM, Oregon State University</a></td>
       <td>Finding dry regions</td></tr>
   <tr><td>Best Available Maps, 2025: preliminary FEMA zones and awareness floodplains</td><td><a href="https://gis.bam.water.ca.gov/">California Department of Water Resources</a></td>

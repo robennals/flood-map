@@ -76,6 +76,7 @@ uses small pages and retries; a full Bay Area fetch takes a while.
 | Flood insurance claims | OpenFEMA NFIP Redacted Claims v3 |
 | Census block groups, county outlines | US Census Bureau |
 | Levee-protected land and overtopping chances | US Army Corps of Engineers National Levee Database |
+| Properties mud flows from recent burn areas could reach (Los Angeles County) | Los Angeles County Public Works, post-fire debris flow hazards |
 | Average yearly rainfall, 1991–2020 | PRISM, Oregon State University |
 | Historical flood outlines (Santa Clara County) | Santa Clara Valley Water District |
 

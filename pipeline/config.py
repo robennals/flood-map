@@ -48,6 +48,8 @@ BUILD_WORKERS = int(os.environ.get("BUILD_WORKERS", 3))
 MAP_LAYERS = {
     "fema_high": 5, "prelim_high": 5, "dwr_awareness": 5, "levee_often_overtopped": 5, "levee": 5,
     "terrain_elevated": 5, "terrain_moderate": 7, "coverage": 5,
+    # Individual properties: too small to see before zoom 9
+    "mudflow_higher": 9, "mudflow_elevated": 9, "mudflow_moderate": 9,
 }
 
 # Downloads stop before free disk space would fall below this
@@ -114,6 +116,15 @@ VALLEY_WATER_FLOODS = {
 }
 VALLEY_WATER_SERVICE = "https://services2.arcgis.com/9KdAx8qBsHiGXOEw/arcgis/rest/services/{service}/FeatureServer/0"
 VALLEY_WATER_COUNTY = "06085"
+
+# LA County Public Works' current list of properties that mud and debris flows from burn areas of the last five
+# years could reach, with the storm size ("phase") at which they would. Phase 1: small, isolated flows;
+# phase 2: moderate, more widespread; phase 3: significant and widespread (https://dpw.lacounty.gov/wrd/forecast/).
+# Each property is listed at the first phase that reaches it, as a "Safety Issue" (the property itself is
+# endangered) or an "Access Issue" (the road to it may be blocked).
+LA_MUDFLOW_PROPERTIES = ("https://dpw.gis.lacounty.gov/dpw/rest/services/PostFireDebrisFlowHazards/"
+                         "FeatureServer/34")  # "Vulnerable Properties (Last 5 Years)"
+LA_COUNTY = "06037"
 
 
 def county_raw(fips):
