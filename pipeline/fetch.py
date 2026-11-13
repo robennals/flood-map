@@ -5,6 +5,7 @@ Usage: python -m pipeline.fetch <region>      e.g. python -m pipeline.fetch bay-
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 
@@ -12,12 +13,26 @@ import geopandas as gpd
 import requests
 
 from . import config
-from .arcgis import download_layer
+from .arcgis import download_layer, get_json
 
 
 # Remote elevation tiles are read over HTTP; retry dropped connections instead of skipping a tile
 GDAL_REMOTE_ENV = {**os.environ, "GDAL_HTTP_MAX_RETRY": "5", "GDAL_HTTP_RETRY_DELAY": "5",
                    "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR"}
+
+
+def build_vrt(path, sources):
+    """Index many raster files as one. The old index is only replaced once the new one is complete, since a
+    running build may be reading it and gdalbuildvrt only warns when a remote file can't be opened."""
+    tmp = path.with_name(path.stem + ".new.vrt")
+    for attempt in range(3):
+        subprocess.run(["gdalbuildvrt", "-q", "-overwrite", str(tmp), *sources], check=True, env=GDAL_REMOTE_ENV)
+        included = tmp.read_text().count("<SourceFilename")
+        if included == len(sources):
+            os.replace(tmp, path)
+            return
+        log(f"  only {included} of {len(sources)} files could be opened for {path.name}; retrying")
+    sys.exit(f"could not open every file for {path.name}; re-run to retry")
 
 
 def log(msg):
@@ -28,6 +43,11 @@ def download_file(url, path):
     if path.exists():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
+    size = int(requests.head(url, timeout=60, allow_redirects=True).headers.get("Content-Length", 0))
+    free = shutil.disk_usage(path.parent).free
+    if free - size < config.MIN_FREE_DISK_GB * 1e9:
+        sys.exit(f"not downloading {url}: it is {size / 1e9:.1f} GB and only {free / 1e9:.0f} GB is free "
+                 f"(keeping at least {config.MIN_FREE_DISK_GB} GB free; see MIN_FREE_DISK_GB in pipeline/config.py)")
     tmp = path.with_suffix(path.suffix + ".partial")
     subprocess.run(["curl", "-sSfL", "--retry", "5", "--retry-delay", "10", "-o", str(tmp), url], check=True)
     tmp.rename(path)
@@ -53,6 +73,7 @@ def fetch_county(fips):
 
     layers = {"fema_zones": (config.FEMA_ZONES, "FLD_ZONE,ZONE_SUBTY,DFIRM_ID")}
     layers.update({name: (f"{config.DWR_BAM}/{num}", "*") for name, num in config.DWR_LAYERS.items()})
+    layers["nld_leveed_areas"] = (config.NLD_LEVEED_AREAS, "SYSTEM_NAME,OVERTOPPING_ACE,FEMA_ACCREDITATION_RATING")
     for name, (url, fields) in layers.items():
         path = raw / f"{name}.geojson"
         if not path.exists():
@@ -62,9 +83,10 @@ def fetch_county(fips):
     if not claims_path.exists():
         rows, skip = [], 0
         while True:
-            page = requests.get(config.FEMA_CLAIMS, timeout=180, params={
+            page = get_json(config.FEMA_CLAIMS, {
                 "$filter": f"countyCode eq '{fips}'", "$top": 10000, "$skip": skip,
-                "$select": "yearOfLoss,censusGeoid,ratedFloodZone,amountPaidOnBuildingClaim"}).json()["NfipClaims"]
+                "$select": "yearOfLoss,censusGeoid,ratedFloodZone,amountPaidOnBuildingClaim"},
+                f"claims from {skip}")["NfipClaims"]
             rows += page
             skip += len(page)
             if len(page) < 10000:
@@ -76,37 +98,56 @@ def fetch_county(fips):
     download_file(config.TIGER_WATER.format(fips=fips), raw / "water.zip")
 
 
-def region_bounds(fips_list):
-    outlines = gpd.pd.concat([fetch_county_outline(f) for f in fips_list])
-    return outlines.total_bounds
+def county_bounds(fips_list):
+    """Each county's bounding box plus a margin. Working per county keeps a region made of separate
+    areas (say the Bay Area and Southern California) from pulling in everything in between."""
+    m = config.COUNTY_MARGIN_DEG
+    boxes = []
+    for fips in fips_list:
+        minx, miny, maxx, maxy = fetch_county_outline(fips).total_bounds
+        boxes.append((minx - m, miny - m, maxx + m, maxy + m))
+    return boxes
 
 
-def fetch_terrain(bounds):
-    """Height-above-nearest-drainage files for every river basin (HUC6) the region touches."""
-    minx, miny, maxx, maxy = bounds
-    resp = requests.get(config.WBD_HUC6, timeout=120, params={
-        "geometry": f"{minx},{miny},{maxx},{maxy}", "geometryType": "esriGeometryEnvelope", "inSR": 4326,
-        "spatialRel": "esriSpatialRelIntersects", "outFields": "huc6", "returnGeometry": "false", "f": "json"})
-    basins = sorted({feature["attributes"]["huc6"] for feature in resp.json()["features"]})
+def fetch_terrain(boxes):
+    """Height-above-nearest-drainage files for every river basin (HUC6) the region's counties touch."""
+    basins = set()
+    for minx, miny, maxx, maxy in boxes:
+        resp = requests.get(config.WBD_HUC6, timeout=120, params={
+            "geometry": f"{minx},{miny},{maxx},{maxy}", "geometryType": "esriGeometryEnvelope", "inSR": 4326,
+            "spatialRel": "esriSpatialRelIntersects", "outFields": "huc6", "returnGeometry": "false", "f": "json"})
+        basins |= {feature["attributes"]["huc6"] for feature in resp.json()["features"]}
+    basins = sorted(basins)
     log(f"river basins: {', '.join(basins)}")
     for huc6 in basins:
         path = config.RAW / "hand" / f"{huc6}hand.tif"
         if not path.exists():
             log(f"  downloading terrain for basin {huc6} (1-3 GB)")
         download_file(config.HAND_TIF.format(huc6=huc6), path)
-    return [config.RAW / "hand" / f"{h}hand.tif" for h in basins]
+        download_file(config.HAND_CATCHMENTS.format(huc6=huc6), config.RAW / "hand" / f"{huc6}catchmask.tif")
+        download_file(config.HAND_REACHES.format(huc6=huc6), config.RAW / "hand" / f"{huc6}-flows.dbf")
+    return basins
 
 
-def elevation_tiles(bounds):
-    """USGS 1x1 degree elevation tiles covering the region (read remotely; tiles over open ocean don't exist)."""
-    minx, miny, maxx, maxy = bounds
-    urls = []
-    for lat in range(math.floor(miny) + 1, math.floor(maxy) + 2):
-        for lon in range(math.floor(-maxx) + 1, math.floor(-minx) + 2):
-            url = config.USGS_DEM_TILE.format(tile=f"n{lat}w{lon}")
-            if requests.head(url, timeout=60).status_code == 200:
-                urls.append(url)
-    return urls
+def write_stream_reaches(basins, path):
+    """One table of every stream reach in the region: whether it's man-made, and how big a river it is."""
+    reaches = gpd.pd.concat([gpd.read_file(config.RAW / "hand" / f"{h}-flows.dbf",
+                                           columns=["COMID", "FTYPE", "TotDASqKM", "Q0001E"]) for h in basins])
+    reaches = reaches.drop(columns="geometry", errors="ignore").drop_duplicates("COMID")
+    reaches.to_csv(path, index=False)
+    log(f"stream reaches: {len(reaches):,} ({(reaches.FTYPE.isin(config.ARTIFICIAL_CHANNEL_TYPES)).sum():,} canals or pipelines)")
+
+
+def elevation_tiles(boxes):
+    """USGS 1x1 degree elevation tiles covering the region's counties (read remotely; tiles over open
+    ocean don't exist)."""
+    tiles = set()
+    for minx, miny, maxx, maxy in boxes:
+        for lat in range(math.floor(miny) + 1, math.floor(maxy) + 2):
+            for lon in range(math.floor(-maxx) + 1, math.floor(-minx) + 2):
+                tiles.add(f"n{lat}w{lon}")
+    urls = [config.USGS_DEM_TILE.format(tile=tile) for tile in sorted(tiles)]
+    return [url for url in urls if requests.head(url, timeout=60).status_code == 200]
 
 
 def fetch_valley_water_floods():
@@ -127,19 +168,17 @@ def main(region):
         except Exception as err:  # keep going; a re-run picks up where this left off
             log(f"  {fips} FAILED: {err}")
             failed.append(name)
-    bounds = region_bounds(counties)
+    boxes = county_bounds(counties)
     work = config.WORK / region
     work.mkdir(parents=True, exist_ok=True)
-    hand = fetch_terrain(bounds)
-    subprocess.run(["gdalbuildvrt", "-q", "-overwrite", str(work / "hand.vrt"), *map(str, hand)], check=True)
-    dem = elevation_tiles(bounds)
-    vrt = work / "elevation.vrt"
-    subprocess.run(["gdalbuildvrt", "-q", "-overwrite", str(vrt), *[f"/vsicurl/{u}" for u in dem]],
-                   check=True, env=GDAL_REMOTE_ENV)
-    included = vrt.read_text().count("<SourceFilename")
-    if included != len(dem):  # gdalbuildvrt only warns when a remote tile can't be opened
-        sys.exit(f"only {included} of {len(dem)} elevation tiles could be read; re-run to retry")
+    basins = fetch_terrain(boxes)
+    build_vrt(work / "hand.vrt", [str(config.RAW / "hand" / f"{h}hand.tif") for h in basins])
+    build_vrt(work / "catchments.vrt", [str(config.RAW / "hand" / f"{h}catchmask.tif") for h in basins])
+    write_stream_reaches(basins, work / "stream_reaches.csv")
+    dem = elevation_tiles(boxes)
+    build_vrt(work / "elevation.vrt", [f"/vsicurl/{u}" for u in dem])
     log(f"elevation tiles: {len(dem)}")
+    download_file(config.PRISM_ANNUAL_RAINFALL, config.RAW / "climate" / "prism_annual_rainfall.zip")
     if config.VALLEY_WATER_COUNTY in counties:
         fetch_valley_water_floods()
     if failed:

@@ -7,7 +7,10 @@
   + 1 m for every DIST_PENALTY_M metres of distance.
   Elevated if that is under ELEV_ZONE_M, or the spot is under ELEV_CREEK_M above the nearest creek.
   Moderate if under MOD_ZONE_M, or under MOD_CREEK_M above the nearest creek.
-- Land FEMA lists as levee-protected is Elevated.
+- The creek part of those rules only counts real streams: never canals, ditches or pipelines, and in dry regions
+  only rivers that drain a large area or carry snowmelt (see the channel settings in config.py).
+- Land a levee protects (from FEMA or the Army Corps National Levee Database) is Elevated, or Higher if the
+  Army Corps expects the levee to be overtopped more often than the 100-year standard (LEVEE_HIGHER_OVERTOPPING).
 - FEMA's 500-year, "undetermined" and "minimal" labels are notes only: outside studied creek
   corridors they follow city lines, not the land.
 
@@ -21,6 +24,7 @@ import tempfile
 
 import geopandas as gpd
 import numpy as np
+import shapely
 import rasterio
 from rasterio.enums import Resampling
 from rasterio.features import rasterize
@@ -35,13 +39,15 @@ LOOSE_LAYERS = {"terrain_elevated", "terrain_moderate", "undetermined", "note_fe
 GDAL_REMOTE_ENV = {"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR", "GDAL_HTTP_MAX_RETRY": "5", "GDAL_HTTP_RETRY_DELAY": "5"}
 
 
-def classify(ground_m, studied_zone, levee, above_creek_m, cell_m):
+def classify(ground_m, studied_zone, levee, above_creek_m, cell_m, levee_often_overtopped=None, creek_ignored=None):
     """The model's rules on a grid. All arrays share one shape; `cell_m` is the grid spacing.
 
     ground_m: ground elevation (NaN where unknown)
     studied_zone: True inside a studied 1% flood zone
-    levee: True on land FEMA lists as levee-protected
+    levee: True on levee-protected land
     above_creek_m: height above the nearest creek (NaN where unknown)
+    levee_often_overtopped: True behind levees overtopped at least LEVEE_HIGHER_OVERTOPPING of years
+    creek_ignored: True where the nearest channel doesn't count (a canal, or a small dry wash in a dry region)
 
     Returns (level, elevated_score, moderate_score). A score under 1 means the spot qualifies for
     that level by terrain; the scores are continuous so their outlines can be traced like contours.
@@ -62,6 +68,8 @@ def classify(ground_m, studied_zone, levee, above_creek_m, cell_m):
         above_zone_m = np.full(ground_m.shape, np.inf, dtype=np.float32)
     above_zone_m = np.where(np.isnan(above_zone_m), np.inf, above_zone_m)
     above_creek_m = np.where(np.isnan(above_creek_m), np.inf, above_creek_m)
+    if creek_ignored is not None:
+        above_creek_m = np.where(creek_ignored, np.inf, above_creek_m)
 
     elevated_score = np.minimum(above_zone_m / config.ELEV_ZONE_M, above_creek_m / config.ELEV_CREEK_M)
     moderate_score = np.minimum(above_zone_m / config.MOD_ZONE_M, above_creek_m / config.MOD_CREEK_M)
@@ -70,7 +78,23 @@ def classify(ground_m, studied_zone, levee, above_creek_m, cell_m):
     level[moderate_score < 1] = MODERATE
     level[(elevated_score < 1) | levee] = ELEVATED
     level[studied_zone] = HIGHER
+    if levee_often_overtopped is not None:
+        level[levee_often_overtopped] = HIGHER
     return level, elevated_score, moderate_score
+
+
+def _area_only(geometry):
+    """A valid, purely polygonal version of a downloaded shape, or None. Agency data occasionally has
+    self-crossing outlines, or collections mixing areas with stray lines and points."""
+    try:
+        geometry = shapely.make_valid(geometry)
+    except shapely.errors.GEOSException:
+        geometry = geometry.buffer(0)
+    if geometry.geom_type == "GeometryCollection":
+        geometry = shapely.union_all([g for g in geometry.geoms if g.geom_type in ("Polygon", "MultiPolygon")])
+    if geometry.is_empty or geometry.geom_type not in ("Polygon", "MultiPolygon"):
+        return None
+    return geometry
 
 
 def _read_shapes(path):
@@ -78,8 +102,8 @@ def _read_shapes(path):
     if len(shapes) == 0:
         return gpd.GeoDataFrame({"FLD_ZONE": [], "ZONE_SUBTY": []}, geometry=[], crs=config.CRS)
     shapes = shapes[shapes.geometry.notna() & ~shapes.geometry.is_empty].to_crs(config.CRS)
-    shapes["geometry"] = shapes.geometry.make_valid()
-    return shapes
+    shapes["geometry"] = [_area_only(g) for g in shapes.geometry]
+    return shapes[shapes.geometry.notna()]
 
 
 def _land_outline(fips):
@@ -108,6 +132,36 @@ def _ground_elevation(region, fips, land):
         return ground_m, src.transform
 
 
+def _yearly_rainfall(shape, transform):
+    """Average yearly rainfall in mm (PRISM 1991-2020), interpolated onto this grid."""
+    rainfall = np.full(shape, np.nan, dtype=np.float32)
+    path = config.RAW / "climate" / "prism_annual_rainfall.zip"
+    with rasterio.open(f"/vsizip/{path}/prism_ppt_us_25m_2020_avg_30y.tif") as src:
+        reproject(rasterio.band(src, 1), rainfall, dst_transform=transform, dst_crs=config.CRS,
+                  dst_nodata=np.nan, resampling=Resampling.bilinear)
+    return rainfall
+
+
+def _channel_ignored(region, shape, transform):
+    """True where the stream reach a spot drains to doesn't count for the creek rule: no known reach at all (in
+    flat basins that drain nowhere the national data gives height-above-drainage 0 with no channel behind it), a
+    canal, ditch or pipeline, or in a dry region a reach that isn't a real river (by drainage area or typical flow)."""
+    catchment = np.zeros(shape, dtype=np.int32)
+    with rasterio.open(config.WORK / region / "catchments.vrt") as src:
+        reproject(rasterio.band(src, 1), catchment, dst_transform=transform, dst_crs=config.CRS,
+                  dst_nodata=0, resampling=Resampling.nearest)
+    reaches = gpd.pd.read_csv(config.WORK / region / "stream_reaches.csv").set_index("COMID")
+    artificial = reaches.FTYPE.isin(config.ARTIFICIAL_CHANNEL_TYPES)
+    river = (reaches.TotDASqKM >= config.RIVER_MIN_AREA_KM2) | (reaches.Q0001E >= config.RIVER_MIN_FLOW_CFS)
+    ids, cell_index = np.unique(catchment, return_inverse=True)
+    known = np.isin(ids, reaches.index)
+    is_artificial = np.where(known, artificial.reindex(ids, fill_value=False), False)
+    is_river = np.where(known, river.reindex(ids, fill_value=False), False)
+    dry = _yearly_rainfall(shape, transform) < config.ARID_RAINFALL_MM
+    no_reach = ~known[cell_index].reshape(shape)
+    return no_reach | is_artificial[cell_index].reshape(shape) | (dry & ~is_river[cell_index].reshape(shape))
+
+
 def _height_above_creek(region, shape, transform):
     """Height above the nearest creek, 10 m data averaged onto this grid."""
     above_creek_m = np.full(shape, np.nan, dtype=np.float32)
@@ -133,12 +187,16 @@ def run(region, fips, county_name):
         return rasterize(((s, 1) for s in shapes), out_shape=shape, transform=transform, dtype="uint8") > 0
 
     fema = _read_shapes(raw / "fema_zones.geojson")
+    leveed = _read_shapes(raw / "nld_leveed_areas.geojson")
+    overtopping = gpd.pd.to_numeric(leveed.get("OVERTOPPING_ACE", gpd.pd.Series(dtype=float)), errors="coerce")
+    often = overtopping >= config.LEVEE_HIGHER_OVERTOPPING
     zone, subtype = fema.FLD_ZONE.fillna(""), fema.ZONE_SUBTY.fillna("")
     source_layers = {
         "fema_high": fema[zone.str.startswith(("A", "V")) & (zone != "A99")],
         "prelim_high": _read_shapes(raw / "bam_6.geojson"),
         "dwr_awareness": _read_shapes(raw / "bam_8.geojson"),
-        "levee": fema[(zone == "A99") | subtype.str.contains("LEVEE")],
+        "levee_often_overtopped": leveed[often],
+        "levee": gpd.pd.concat([fema[(zone == "A99") | subtype.str.contains("LEVEE")], leveed[~often]]),
         "note_fema_500": gpd.pd.concat([fema[(zone == "X") & subtype.str.contains("0.2 PCT|1 PCT DEPTH")],
                                         _read_shapes(raw / "bam_14.geojson")]),
         "undetermined": fema[zone == "D"],
@@ -147,7 +205,9 @@ def run(region, fips, county_name):
                     | burn(source_layers["dwr_awareness"].geometry))
     level, elevated_score, moderate_score = classify(
         ground_m, studied_zone, burn(source_layers["levee"].geometry),
-        _height_above_creek(region, shape, transform), transform.a)
+        _height_above_creek(region, shape, transform), transform.a,
+        levee_often_overtopped=burn(source_layers["levee_often_overtopped"].geometry),
+        creek_ignored=_channel_ignored(region, shape, transform))
 
     on_land = burn([land])
     with rasterio.open(work / "level.tif", "w", driver="GTiff", width=shape[1], height=shape[0], count=1,
@@ -167,7 +227,8 @@ def run(region, fips, county_name):
 
     layer_shapes = {name: shapes.geometry.union_all().intersection(land) for name, shapes in source_layers.items()}
     # Terrain layers only cover land outside studied zones, so a spot inside a zone gets the zone's reason alone
-    zones = layer_shapes["fema_high"].union(layer_shapes["prelim_high"]).union(layer_shapes["dwr_awareness"])
+    zones = (layer_shapes["fema_high"].union(layer_shapes["prelim_high"]).union(layer_shapes["dwr_awareness"])
+             .union(layer_shapes["levee_often_overtopped"]))
     layer_shapes["terrain_elevated"] = outline_below_one(elevated_score, "elevated").intersection(land).difference(zones)
     layer_shapes["terrain_moderate"] = (outline_below_one(moderate_score, "moderate").intersection(land)
                                         .difference(zones).difference(layer_shapes["terrain_elevated"]))
