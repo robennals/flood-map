@@ -43,6 +43,13 @@ REGIONS = {**COUNTY_GROUPS, "california": {fips: name for group in COUNTY_GROUPS
 # Counties modelled at once by `make build` (each can use a few GB of memory)
 BUILD_WORKERS = int(os.environ.get("BUILD_WORKERS", 3))
 
+# Layers the website draws, and the zoom each first appears at. Anything else the model writes stays out of the
+# map file: the zoomed-out tiles cover a lot of ground and have a size limit.
+MAP_LAYERS = {
+    "fema_high": 5, "prelim_high": 5, "dwr_awareness": 5, "levee_often_overtopped": 5, "levee": 5,
+    "terrain_elevated": 5, "terrain_moderate": 7, "coverage": 5,
+}
+
 # Downloads stop before free disk space would fall below this
 MIN_FREE_DISK_GB = 15
 

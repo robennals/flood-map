@@ -4,6 +4,7 @@ Usage: python -m pipeline.build <region> [county_fips ...]   (default: every cou
        python -m pipeline.build <region> --tiles-only        (just rebuild the map files from existing results)
 Writes data/out/<region>/risk.pmtiles and history.pmtiles, and copies them to web/data/ for local testing.
 """
+import json
 import os
 import shutil
 import subprocess
@@ -55,10 +56,16 @@ def main(region, only=None, run_model=True):
     if missing:
         print(f"not modelled yet, left out of the map files: {', '.join(missing)}")
     combined = config.WORK / region / "risk.geojsonseq"
-    with open(combined, "wb") as dst:
+    with open(combined, "w") as dst:
         for fips in built:
-            with open(config.county_work(fips) / "risk.geojsonseq", "rb") as src:
-                shutil.copyfileobj(src, dst)
+            with open(config.county_work(fips) / "risk.geojsonseq") as src:
+                for line in src:
+                    feature = json.loads(line)
+                    layer = feature["tippecanoe"]["layer"]
+                    if layer not in config.MAP_LAYERS:
+                        continue  # written by the model but not drawn by the site
+                    feature["tippecanoe"]["minzoom"] = config.MAP_LAYERS[layer]
+                    dst.write(json.dumps(feature) + "\n")
     tippecanoe(combined, out / "risk.pmtiles")
 
     placed, total = history.write_layers(built, config.WORK / region / "history.geojsonseq")
