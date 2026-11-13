@@ -23,7 +23,7 @@ upload:  ## Upload the map files to R2 (settings in .env.local)
 	$(PYTHON) -m pipeline.upload $(REGION)
 
 serve:  ## Serve the website locally at http://localhost:8765/?data=local
-	npx --yes http-server web -p 8765 -c-1 -s
+	$(PYTHON) -m pipeline.serve 8765
 
 all: fetch build check
 
