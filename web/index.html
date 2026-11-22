@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<title>California Flood Risk Map</title>
+<title>California and Oregon Flood Risk Map</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/pmtiles@4/dist/pmtiles.js"></script>
@@ -61,7 +61,7 @@
 <div id="map"></div>
 <div id="hint" hidden></div>
 <div id="panel">
-  <form id="search"><input type="search" id="q" placeholder="Enter a California address" autocomplete="street-address"
+  <form id="search"><input type="search" id="q" placeholder="Enter a California or Oregon address" autocomplete="street-address"
     aria-label="Address"><button>Check</button></form>
   <div class="legend" id="legend"></div>
   <div id="levelInfo" hidden></div>
@@ -75,18 +75,18 @@
 <script>
 const LEVELS = {
   4: { name: "Higher", color: "#b91c1c",
-       meaning: "Inside a flood zone that an official study expects to flood about once in 100 years or more often: FEMA's current or upcoming maps, or California's maps of streams FEMA never studied. In Los Angeles County, also homes the county expects mud and debris flows from a recent burn area to reach in a small or moderate storm." },
+       meaning: "Inside a flood zone that an official study expects to flood about once in 100 years or more often: FEMA's current or upcoming maps, California's maps of streams FEMA never studied, or in parts of Oregon FEMA's older paper maps. In Los Angeles County, also homes the county expects mud and debris flows from a recent burn area to reach in a small or moderate storm." },
   3: { name: "Elevated", color: "#f97316",
        meaning: "Low ground: less than about 1 m (3 ft) above the flood level of a nearby high-risk zone, or less than 1.5 m (5 ft) above the nearest creek or river. Also land protected by levees: it floods only if a levee is overtopped or fails, but then flooding can be sudden and deep. In Los Angeles County, also homes mud flows from a recent burn area could reach in a big storm, and properties UC Irvine's flood model of the Los Angeles basin floods more than 30 cm (1 ft) deep in a storm expected about once in 20 years." },
   2: { name: "Moderate", color: "#fcd34d",
        meaning: "Fairly low ground: less than about 3 m (10 ft) above the flood level of a nearby high-risk zone, or less than 4 m (13 ft) above the nearest creek or river. In Los Angeles County, also homes whose road mud flows from a recent burn area could block, and properties UC Irvine's model floods more than 10 cm (4 in) deep in a 100-year storm." },
   1: { name: "Lower", color: "#f1f5f9",
-       meaning: "None of the above. Lower is not no risk: heavy rain can overwhelm storm drains on any street." },
+       meaning: "None of the above. Lower is not no risk: heavy rain can overwhelm storm drains on any street, and this map doesn't include tsunamis or landslides." },
 };
 const KEY = [
   ...[4, 3, 2, 1].map(level => ({ ...LEVELS[level], shape: "square" })),
   { name: "Past flood", short: "Floods", color: "#60a5fa", shape: "square",
-    meaning: "An area that really flooded, from Santa Clara Valley Water District's records (Coyote Creek 2017, San Francisquito Creek 1998 and 2023, and others). Records from other counties aren't included yet." },
+    meaning: "An area that really flooded: in north-west Oregon in February 1996, as the Army Corps of Engineers mapped it, and in Santa Clara County, from the Valley Water District's records (Coyote Creek 2017, San Francisquito Creek 1998 and 2023, and others). Records from other places aren't included yet." },
   { name: "Insurance claims", short: "Claims", color: "#1d4ed8", shape: "circle",
     meaning: "Flood insurance claims filed since 1995, from FEMA. Each circle is one neighbourhood (census block group); bigger means more claims. Only insured homes file claims, so more homes may have flooded." },
 ];
@@ -96,6 +96,7 @@ const KEY = [
 const SOURCES = [
   ["fema_high", 4, "In FEMA's 100-year flood zone."],
   ["prelim_high", 4, "In FEMA's upcoming 100-year flood zone."],
+  ["paper_high", 4, "In a 100-year flood zone on FEMA's older paper map (1978–2002), as digitised by the State of Oregon. FEMA has no digital map here, so this may be out of date."],
   ["dwr_awareness", 4, "In a state-mapped floodplain along a stream FEMA never studied."],
   ["mudflow_higher", 4, "LA County warns that mud and debris flows from a recent burn area could endanger this property even in a small or moderate storm."],
   ["levee_often_overtopped", 4, "Protected by a levee that the Army Corps of Engineers expects to be overtopped more often than once in 100 years."],
@@ -133,14 +134,23 @@ for (const entry of KEY) {
 const protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 const CONFIG = window.FLOOD_MAP_CONFIG;
-const DATA_BASE = (new URLSearchParams(location.search).get("data") === "local" ? "data" : CONFIG.dataUrl)
-  + `/${CONFIG.region}/`;
+const DATA_ROOT = new URLSearchParams(location.search).get("data") === "local" ? "data" : CONFIG.dataUrl;
+const dataFile = (region, file) => `pmtiles://${new URL(`${DATA_ROOT}/${region}/${file}`, location.href)}`;
+// Each region has its own files, so each map layer is repeated once per region
+const perRegion = name => CONFIG.regions.map(region => `${name}:${region}`);
+// Where Oregon's tsunami warning shows: its coastal counties, west of this longitude (Lane and Douglas reach inland)
+const TSUNAMI_COUNTIES = new Set(["Clatsop", "Tillamook", "Lincoln", "Lane", "Douglas", "Coos", "Curry"]);
+const TSUNAMI_EAST_LIMIT = -123.7;
+const TSUNAMI_NOTE = `<p class="popup-line"><b>Tsunamis aren't included.</b>
+  <a href="https://nvs.nanoos.org/TsunamiEvac" target="_blank" rel="noopener">Check Oregon's tsunami evacuation map</a>.</p>`;
 
 const map = new maplibregl.Map({
   container: "map",
   attributionControl: { compact: true },
   style: "https://tiles.openfreemap.org/styles/positron",
-  bounds: [[-124.5, 32.5], [-114.1, 42.0]],  // all of California, at whatever zoom fits the screen
+  bounds: [[-124.7, 32.5], [-114.1, 46.3]],  // all of California and Oregon, at whatever zoom fits the screen
+  // ...below the search panel, which would otherwise sit on Portland
+  fitBoundsOptions: { padding: { top: document.getElementById("panel").getBoundingClientRect().bottom, bottom: 8, left: 0, right: 0 } },
 });
 // Zoom buttons make zooming obvious ("Back to flat map" resets rotation and tilt, so no compass)
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), PHONE ? "bottom-right" : "top-right");
@@ -154,7 +164,10 @@ function allowRotation(allowed) {
 }
 allowRotation(false);
 map.on("load", () => {
-  map.addSource("risk", { type: "vector", url: `pmtiles://${new URL(DATA_BASE + "risk.pmtiles", location.href)}` });
+  for (const region of CONFIG.regions) {
+    map.addSource(`risk:${region}`, { type: "vector", url: dataFile(region, "risk.pmtiles") });
+    map.addSource(`history:${region}`, { type: "vector", url: dataFile(region, "history.pmtiles") });
+  }
   const firstSymbol = map.getStyle().layers.find(l => l.type === "symbol")?.id;
   // Solid fills go under the basemap's roads so streets stay readable
   const underStreets = "tunnel_motorway_casing";
@@ -167,35 +180,40 @@ map.on("load", () => {
                 attribution: "Elevation: <a href='https://registry.opendata.aws/terrain-tiles/'>AWS Terrain Tiles</a>" };
   map.addSource("dem", dem);
   map.addSource("dem3d", dem);  // MapLibre recommends a separate source for 3D terrain
-  map.addLayer({ id: "coverage", type: "line", source: "risk", "source-layer": "coverage",
-                 paint: { "line-color": "#475569", "line-width": 1.5, "line-dasharray": [3, 2] } }, firstSymbol);
+  const addPerRegion = (name, source, sourceLayer, style, before) => {
+    for (const region of CONFIG.regions) {
+      map.addLayer({ id: `${name}:${region}`, source: `${source}:${region}`, "source-layer": sourceLayer, ...style }, before);
+    }
+  };
+  addPerRegion("coverage", "risk", "coverage", { type: "line",
+               paint: { "line-color": "#475569", "line-dasharray": [3, 2],
+                        "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.2, 5, 0.6, 7, 1.5] } }, firstSymbol);
   // Draw lowest levels first so higher levels paint on top
   for (const [name, level] of [...SOURCES].reverse()) {
-    map.addLayer({ id: name, type: "fill", source: "risk", "source-layer": name,
-                   paint: { "fill-color": ["interpolate", ["linear"], ["zoom"], 12, COLORS[level], 15, TINTS[level]] } },
+    addPerRegion(name, "risk", name, { type: "fill",
+                 paint: { "fill-color": ["interpolate", ["linear"], ["zoom"], 12, COLORS[level], 15, TINTS[level]] } },
                  underStreets);
   }
-  map.addSource("history", { type: "vector", url: `pmtiles://${new URL(DATA_BASE + "history.pmtiles", location.href)}` });
-  map.addLayer({ id: "past_floods_fill", type: "fill", source: "history", "source-layer": "past_floods",
-                 paint: { "fill-color": "#60a5fa", "fill-opacity": 0.45 } }, firstSymbol);
-  map.addLayer({ id: "past_floods_line", type: "line", source: "history", "source-layer": "past_floods",
-                 paint: { "line-color": "#1d4ed8", "line-width": 2 } }, firstSymbol);
+  addPerRegion("past_floods_fill", "history", "past_floods", { type: "fill",
+               paint: { "fill-color": "#60a5fa", "fill-opacity": 0.45 } }, firstSymbol);
+  addPerRegion("past_floods_line", "history", "past_floods", { type: "line",
+               paint: { "line-color": "#1d4ed8", "line-width": 2 } }, firstSymbol);
   // The neighbourhood behind a claims circle, outlined only while that circle's popup is open
-  map.addLayer({ id: "claim_area", type: "line", source: "history", "source-layer": "claim_areas",
-                 filter: ["==", ["get", "geoid"], ""],
-                 paint: { "line-color": "#1d4ed8", "line-width": 2.5, "line-dasharray": [2, 1.5] } }, firstSymbol);
-  map.addLayer({ id: "claims", type: "circle", source: "history", "source-layer": "claims",
-                 paint: { "circle-color": "#1d4ed8", "circle-opacity": 0.8, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5,
-                          "circle-radius": ["interpolate", ["linear"], ["sqrt", ["get", "claims"]], 1, 4, 10, 18] } }, firstSymbol);
+  addPerRegion("claim_area", "history", "claim_areas", { type: "line", filter: ["==", ["get", "geoid"], ""],
+               paint: { "line-color": "#1d4ed8", "line-width": 2.5, "line-dasharray": [2, 1.5] } }, firstSymbol);
+  addPerRegion("claims", "history", "claims", { type: "circle",
+               paint: { "circle-color": "#1d4ed8", "circle-opacity": 0.8, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5,
+                        "circle-radius": ["interpolate", ["linear"], ["sqrt", ["get", "claims"]], 1, 4, 10, 18] } }, firstSymbol);
   map.addLayer({ id: "hillshade", type: "hillshade", source: "dem",
                  paint: { "hillshade-exaggeration": 0.45, "hillshade-shadow-color": "#3b3226",
                           "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#5a4a35" } }, underStreets);
 });
 
 // Point-in-polygon against the coverage outline (drawn as a line, so clicks inside it don't hit it)
-function insideCoverage(lngLat) {
+function coverageAt(lngLat) {
   const [x, y] = [lngLat.lng, lngLat.lat];
-  return map.querySourceFeatures("risk", { sourceLayer: "coverage" }).some(f => {
+  const outlines = CONFIG.regions.flatMap(region => map.querySourceFeatures(`risk:${region}`, { sourceLayer: "coverage" }));
+  return outlines.find(f => {
     const polygons = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
     return polygons.some(rings => rings.reduce((inside, ring) => {
       let crossings = false;
@@ -212,18 +230,21 @@ function insideCoverage(lngLat) {
 function levelAt(lngLat) {
   const point = map.project(lngLat);
   const box = [[point.x - 1, point.y - 1], [point.x + 1, point.y + 1]];
-  if (!insideCoverage(lngLat)) return { name: "No data here yet", color: "#64748b",
-    reason: "This map covers land in California. There's no data over the ocean, the Bay or large lakes." };
-  const hitNames = new Set(map.queryRenderedFeatures(box, { layers: SOURCES.map(s => s[0]) }).map(f => f.layer.id));
+  const covered = coverageAt(lngLat);
+  if (!covered) return { name: "No data here yet", color: "#64748b",
+    reason: "This map covers land in California and Oregon. There's no data over the ocean, bays, big rivers or large lakes." };
+  const hitNames = new Set(map.queryRenderedFeatures(box, { layers: SOURCES.flatMap(([name]) => perRegion(name)) })
+    .map(f => f.sourceLayer));
   const top = SOURCES.filter(([name]) => hitNames.has(name)).sort((a, b) => b[1] - a[1])[0];
-  if (!top) return { ...LEVELS[1], color: "#94a3b8", reason: "No flood source is mapped here." };
-  return { ...LEVELS[top[1]], reason: top[2] };
+  const tsunami = TSUNAMI_COUNTIES.has(covered.properties.county) && lngLat.lng < TSUNAMI_EAST_LIMIT;
+  if (!top) return { ...LEVELS[1], color: "#94a3b8", reason: "No flood source is mapped here.", tsunami };
+  return { ...LEVELS[top[1]], reason: top[2], tsunami };
 }
 
 // A note when the spot is inside a recorded past flood
 function pastFloodNote(point) {
-  const flood = map.queryRenderedFeatures([[point.x - 1, point.y - 1], [point.x + 1, point.y + 1]], { layers: ["past_floods_fill"] })[0];
-  return flood ? `<p class="popup-line">Flooded${flood.properties.year ? " in " + flood.properties.year : ""} (${flood.properties.creek}).</p>` : "";
+  const flood = map.queryRenderedFeatures([[point.x - 1, point.y - 1], [point.x + 1, point.y + 1]], { layers: perRegion("past_floods_fill") })[0];
+  return flood ? `<p class="popup-line">Flooded${flood.properties.year ? " in " + flood.properties.year : ""}${flood.properties.creek ? ` (${flood.properties.creek})` : ""}.</p>` : "";
 }
 
 let popup;
@@ -236,13 +257,13 @@ function showPopup(lngLat, html) {
 function showLevel(lngLat) {
   const at = levelAt(lngLat);
   showPopup(lngLat, `<span class="badge" style="background:${at.color};color:${at.name === "Moderate" ? "#1d2329" : "#fff"}">${at.name}</span>
-    <p class="popup-line">${at.reason}</p>${pastFloodNote(map.project(lngLat))}`);
+    <p class="popup-line">${at.reason}</p>${pastFloodNote(map.project(lngLat))}${at.tsunami ? TSUNAMI_NOTE : ""}`);
 }
 
 // Clicking a claims circle describes that neighbourhood's claims instead of the ground under it
 function claimsAt(point) {
   const pad = 6;
-  return map.queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ["claims"] })[0] || null;
+  return map.queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: perRegion("claims") })[0] || null;
 }
 // A circle's report goes in the panel rather than a popup, so it doesn't cover the outlined neighbourhood
 const claimsInfo = document.getElementById("claimsInfo");
@@ -256,23 +277,24 @@ function showClaims(claims) {
     not necessarily where the circle is.</p>`;
   claimsInfo.hidden = false;
   document.getElementById("closeClaims").addEventListener("click", hideClaims);
-  map.setFilter("claim_area", ["==", ["get", "geoid"], claims.properties.geoid]);
+  for (const id of perRegion("claim_area")) map.setFilter(id, ["==", ["get", "geoid"], claims.properties.geoid]);
 }
 function hideClaims() {
   if (claimsInfo.hidden) return;
   claimsInfo.hidden = true;
-  map.setFilter("claim_area", ["==", ["get", "geoid"], ""]);
+  for (const id of perRegion("claim_area")) map.setFilter(id, ["==", ["get", "geoid"], ""]);
 }
 
 // Flood events (claims circles and past-flood areas) open with a click or tap. Anywhere else, pressing and
 // holding a spot shows its flood risk, so clicking, tapping and dragging around the map don't open popups.
 function pastFloodAt(point) {
-  return map.queryRenderedFeatures([[point.x - 1, point.y - 1], [point.x + 1, point.y + 1]], { layers: ["past_floods_fill"] })[0] || null;
+  return map.queryRenderedFeatures([[point.x - 1, point.y - 1], [point.x + 1, point.y + 1]], { layers: perRegion("past_floods_fill") })[0] || null;
 }
 function showPastFlood(lngLat, flood) {
   const year = flood.properties.year ? " in " + flood.properties.year : "";
   showPopup(lngLat, `<span class="badge" style="background:#1d4ed8">Past flood</span>
-    <p class="popup-line">Flooded${year} (${flood.properties.creek}, Santa Clara Valley Water District records).</p>
+    <p class="popup-line">Flooded${year} (${[flood.properties.creek,
+      `${flood.properties.source || "Santa Clara Valley Water District"} records`].filter(Boolean).join(", ")}).</p>
     <p class="popup-line" style="color:#59636e">Press and hold to see the flood risk here.</p>`);
 }
 function showFloodEventAt(point, lngLat) {
@@ -339,9 +361,10 @@ if (!localStorage.getItem("longPressHintShown")) {
 document.getElementById("search").addEventListener("submit", async e => {
   e.preventDefault();
   const q = document.getElementById("q").value;
-  // Only search inside California, so a street name shared with another state can't land there
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&viewbox=-124.5,42.0,-114.1,32.5&bounded=1&q=${encodeURIComponent(q)}`;
-  const [hit] = await (await fetch(url)).json();
+  // Only accept results in the two states: the box around them also takes in Nevada and parts of their neighbours,
+  // so a street name shared with those can't land there
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=20&addressdetails=1&countrycodes=us&viewbox=-124.8,46.4,-114.1,32.5&bounded=1&q=${encodeURIComponent(q)}`;
+  const hit = (await (await fetch(url)).json()).find(result => ["California", "Oregon"].includes(result.address?.state));
   if (!hit) { alert("Couldn't find that address."); return; }
   const lngLat = new maplibregl.LngLat(Number(hit.lon), Number(hit.lat));
   map.flyTo({ center: lngLat, zoom: 15, duration: 0 });

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<title>About the California Flood Risk Map</title>
+<title>About the California and Oregon Flood Risk Map</title>
 <style>
   body { margin: 0; font: 16px/1.6 system-ui, sans-serif; color: #1d2329; background: #f8fafc; }
   main { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; background: #fff; min-height: 100vh; }
@@ -33,8 +33,8 @@ Sunnyvale, California. It is a personal project, not a product of any company or
 If you spot a mistake or have a question, email me at <a href="mailto:rob.ennals@gmail.com">rob.ennals@gmail.com</a>.</p>
 
 <div class="summary">
-  <p><b>In short:</b> we start from the creek flood zones that FEMA and California's water agency have actually
-  studied. Everywhere else, we judge risk from the shape of the land: how far each spot sits above those flood
+  <p><b>In short:</b> we start from the flood zones that FEMA and California's water agency have actually
+  studied, and in parts of Oregon that FEMA hasn't mapped digitally, its older paper maps. Everywhere else, we judge risk from the shape of the land: how far each spot sits above those flood
   zones and above the nearest creek. In Los Angeles County we add two more expert sources: the county's list of
   properties below recent burn areas that mud and debris flows could reach, and UC Irvine's detailed flood model of
   the Los Angeles basin, which includes the storm drains. We checked the result against real floods (Coyote Creek
@@ -50,8 +50,8 @@ If you spot a mistake or have a question, email me at <a href="mailto:rob.ennals
   <tr><th>Level</th><th>What puts a spot there</th></tr>
   <tr><td><span class="swatch" style="background:#b91c1c"></span><b>Higher</b></td>
       <td>Inside a flood zone that an official creek study expects to flood about once in 100 years or more often:
-      FEMA's current maps, FEMA's upcoming (preliminary) maps, or California's "awareness" floodplains for streams
-      FEMA never studied. Also land behind a levee that the US Army Corps of Engineers expects to be overtopped more
+      FEMA's current maps, FEMA's upcoming (preliminary) maps, California's "awareness" floodplains for streams
+      FEMA never studied, or, where FEMA has no digital map in Oregon, its older paper maps. Also land behind a levee that the US Army Corps of Engineers expects to be overtopped more
       often than once in 100 years. In Los Angeles County, also properties the county expects mud and debris flows
       from a recent burn area to endanger in a small or moderate storm.</td></tr>
   <tr><td><span class="swatch" style="background:#f97316"></span><b>Elevated</b></td>
@@ -78,6 +78,12 @@ Those studies produce "1% annual chance" (100-year) flood zones. We treat these 
 information, and every spot inside one is <b>Higher</b>. They matched real floods well: 86–100% of the land that
 actually flooded in the events below was inside them.</p>
 
+<p><b>Oregon's older maps:</b> FEMA's digital map has none of the flood zones of Baker, Gilliam, Grant, Jefferson,
+Lake, Malheur, Union, Wallowa, Wasco and Wheeler counties, or only a sliver, and misses parts of Jackson and Sherman.
+There we use FEMA's paper maps, which the State of Oregon digitised. They date from 1978 to 2002, so they can be out
+of date and a little out of place; the map says when a spot's level comes from one. We only use them where FEMA has
+no digital map.</p>
+
 <h3>2. Measure how high each other spot sits above those zones</h3>
 <p>Flood water spreads onto nearby land that is not much higher than the flood itself. So for every spot outside a
 flood zone, we find the nearest large flood zone and compare ground heights:</p>
@@ -87,7 +93,9 @@ flood zone, we find the nearest large flood zone and compare ground heights:</p>
   flood just reaches, so its ground height usually is the flood level. On steep banks and seawalls the edge is
   almost at the river's surface instead, so where FEMA has published a 100-year flood level we use that if it's
   higher. On the coast and around lakes that's the level of the zone itself. Along rivers it's the lower of the
-  two nearest published levels either side. We ignore any level that would top the bank FEMA shows as dry.</li>
+  two nearest published levels either side. We ignore any level that would top the bank FEMA shows as dry.
+  <b>So far this is in Oregon's map only:</b> California's will get it when it's next rebuilt, and until then some
+  land just above steep banks, seawalls and sea bluffs there is rated too low.</li>
   <li><b>Distance:</b> we add 1 m of height for every 400 m of distance from the zone. On flat ground this makes the
   risk fade gradually with distance instead of stopping at a line.</li>
   <li><b>Small zones don't spread risk:</b> only flood zones of at least 5 hectares (about 220 m × 220 m) are used
@@ -110,6 +118,9 @@ and snowmelt over its whole drainage area), not from the rain where it happens t
   Kern and Owens). Small desert washes rarely run, and on flat desert ground they made huge areas look risky.</li>
   <li><b>Flat basins that drain to no stream</b> (such as the Imperial Valley floor) are left to the official flood
   zones, since there is no channel to measure height above.</li>
+  <li><b>In basins with no outlet,</b> like those of south-east Oregon, the national creek data treats the whole
+  basin as creek level, hills and all. There we measure height above the basin's floor (the lowest ground within
+  2 km) instead.</li>
 </ul>
 
 <h3>4. Add mud and debris flows below recent burn areas (Los Angeles County)</h3>
@@ -178,6 +189,12 @@ which level UC Irvine's Los Angeles model maps to (step 5), which used the Los A
 </table>
 <p class="small">For comparison, Higher covers 7% of Santa Clara County's land and Elevated 8%.</p>
 
+<h3>Oregon: the February 1996 flood (Army Corps of Engineers)</h3>
+<p>The Army Corps mapped 704 km² of flooded land in 11 north-west Oregon counties. 98.6% of it is rated Higher or
+Elevated, and 93.8% Higher. The weakest county is Tillamook, where 3% of the flooded land is rated Lower. FEMA may have
+used this flood in drawing some of its zones, so it is not a wholly independent test. Eastern and southern Oregon have
+no flood outlines to test against.</p>
+
 <h3>Flood insurance claims, 1995–2026 (FEMA)</h3>
 <p>FEMA publishes every flood insurance claim, tagged with its census neighbourhood (a "block group" of a few
 hundred homes), not its address. On the map each neighbourhood with claims is a circle; clicking it outlines the
@@ -205,6 +222,18 @@ claims of those without. Where the fit is weaker:</p>
   <li><b>San Francisco</b> has only 19 claims, 16 of them in neighbourhoods the map doesn't flag. This fits
   its known sewer back-ups, which no source used here models.</li>
 </ul>
+<p>Across Oregon, 4,953 claims could be placed in a neighbourhood:</p>
+<table>
+  <tr><th>Neighbourhoods by share of land rated Higher or Elevated</th><th>Share of neighbourhoods</th><th>Share of claims</th><th>Claims per neighbourhood</th></tr>
+  <tr><td>None of it</td><td>27%</td><td>1% (63 claims)</td><td>0.09</td></tr>
+  <tr><td>Under 10%</td><td>35%</td><td>42%</td><td>2.28</td></tr>
+  <tr><td>10–30%</td><td>20%</td><td>26%</td><td>2.51</td></tr>
+  <tr><td>More than 30%</td><td>18%</td><td>30% (1,499 claims)</td><td>3.16</td></tr>
+</table>
+<p>Almost no claims come from neighbourhoods without flagged land, but the <i>share</i> of flagged land says less than
+it does in California. In 8 of the 20 Oregon counties with at least 50 claims (Clatsop, Columbia, Coos, Curry, Douglas,
+Lane, Lincoln and Polk), claims don't rise with it. Rural neighbourhoods there cover up to several hundred square
+kilometres, so a town on a floodplain can be a tiny share of its neighbourhood.</p>
 <p class="small">The full numbers for every county are produced by <code>make check</code> in the
 <a href="https://github.com/robennals/flood-map">source code</a>.</p>
 
@@ -214,6 +243,9 @@ claims of those without. Where the fit is weaker:</p>
   Angeles's hillside neighbourhoods in 1998 and 2005) is only shown below burn areas of the last five years in Los
   Angeles County. Elsewhere, the stream data used here leaves out the smallest canyons, and no flood map covers
   them. Insurance claims there show up on the map as circles in uncoloured areas.</li>
+  <li><b>Tsunamis and landslides:</b> not included at all. On the coast a big tsunami would reach far more land than
+  the storm floods shown here. Use <a href="https://nvs.nanoos.org/TsunamiEvac">Oregon's tsunami evacuation map</a> or
+  <a href="https://www.conservation.ca.gov/cgs/tsunami/maps">California's tsunami hazard maps</a>.</li>
   <li><b>Storm drains:</b> street flooding from overwhelmed storm drains is only modelled in the Los Angeles basin,
   by UC Irvine's model. Elsewhere it can happen on any street.</li>
   <li><b>Desert flash floods:</b> in dry regions, small washes are not counted, so flash floods down desert washes
@@ -225,9 +257,12 @@ claims of those without. Where the fit is weaker:</p>
   averaged to that grid. Use this map for the neighbourhood picture, not to compare one house with the next.</li>
   <li><b>Coastal and Bay flooding:</b> this version relies on FEMA's Bay shoreline zones. Storm-surge modelling
   (USGS CoSMoS) is not yet included.</li>
+  <li><b>Straight steps on flat ground:</b> height above the nearest creek is measured from whichever creek a spot
+  drains to, so the level can change abruptly where flat land switches from one creek to another, as it does east of
+  La Grande.</li>
   <li><b>Insurance claims:</b> only insured homes file claims, so more homes may have flooded. The census
   neighbourhood codes on some claims may not match the neighbourhood outlines we used, so a few may be misplaced.</li>
-  <li><b>Coverage:</b> all 58 California counties. Over the ocean, the Bay and large lakes the map shows no data.</li>
+  <li><b>Coverage:</b> all 58 California and all 36 Oregon counties. Over the ocean, bays, big rivers and large lakes the map shows no data.</li>
 </ul>
 
 <h2>Data sources</h2>
@@ -257,6 +292,14 @@ claims of those without. Where the fit is weaker:</p>
   <tr><td>Height Above Nearest Drainage, 10 m</td><td><a href="https://web.corral.tacc.utexas.edu/nfiedata/">National Flood Interoperability Experiment (University of Texas / TACC)</a></td>
       <td>Height above the nearest creek, which stream each spot drains to, and each stream's drainage area,
       typical flow and type (from the NHDPlus stream database)</td></tr>
+  <tr><td>Statewide Flood Hazard Database: FEMA's paper maps, digitised, and the February 1996 flood as the Army
+      Corps of Engineers mapped it</td>
+      <td><a href="https://catalog.data.gov/dataset/oregon-statewide-flood-hazard-database-fema-flood-insurance-studies-2015">State of Oregon</a>,
+      funded by the Oregon Geospatial Enterprise Office. The state makes no warranty as to its accuracy or completeness.</td>
+      <td>Oregon flood zones where FEMA has no digital map (Higher); past floods</td></tr>
+  <tr><td>Preliminary and pending flood maps for Oregon</td>
+      <td><a href="https://hazards.fema.gov/arcgis/rest/services/PrelimPending/Prelim_NFHL/MapServer">FEMA</a></td>
+      <td>Upcoming Oregon flood zones (Higher) and their flood levels</td></tr>
   <tr><td>Historical flood outlines</td><td><a href="https://www.valleywater.org/flooding-safety/flood-ready/historical-flood-reports/2017-coyote-creek-flood">Santa Clara Valley Water District</a></td>
       <td>Past floods and claims on the map, and the checks above</td></tr>
   <tr><td>NFIP Redacted Claims v3</td><td><a href="https://www.fema.gov/openfema-data-page/nfip-redacted-claims-v3">OpenFEMA</a></td>
@@ -266,7 +309,7 @@ claims of those without. Where the fit is weaker:</p>
   <tr><td>Hill shading and 3D</td><td><a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a></td><td>Display only</td></tr>
   <tr><td>Base map</td><td><a href="https://openfreemap.org/">OpenFreeMap</a>, © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</td><td>Display only</td></tr>
 </table>
-<p class="small">All data downloaded November 12, 2026.</p>
+<p class="small">California data downloaded November 12, 2026; Oregon data November 22, 2026.</p>
 
 <p><a class="back" href="index.html">← Back to the map</a></p>
 </main>
