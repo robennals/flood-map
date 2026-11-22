@@ -14,7 +14,7 @@ import numpy as np
 import rasterio
 from rasterio.features import rasterize
 
-from . import config
+from . import config, oregon
 from .model import LEVEL_SHIFT
 
 NAMES = {4: "higher", 3: "elevated", 2: "moderate", 1: "lower"}
@@ -43,6 +43,14 @@ def check_county(fips):
                                  dtype="uint8") > 0
                 n, s = shares(mask)
                 result["floods"][name] = {"km2": round(n * cell_km2, 2), **{k: round(v) for k, v in s.items()}}
+
+    if oregon.is_oregon(fips):
+        mask = rasterize(((g, 1) for g in oregon.past_flood().to_crs(crs).geometry), out_shape=level.shape,
+                         transform=transform, dtype="uint8") > 0
+        n, s = shares(mask)
+        if n:
+            result["floods"][str(config.OREGON_PAST_FLOOD["year"])] = {
+                "km2": round(n * cell_km2, 2), **{k: round(v) for k, v in s.items()}}
 
     raw = config.county_raw(fips)
     claims = [claim for claim in json.loads((raw / "claims.json").read_text())

@@ -12,7 +12,7 @@ import sys
 import geopandas as gpd
 import requests
 
-from . import config
+from . import config, oregon
 from .arcgis import download_by_ids, download_layer, get_json
 
 
@@ -73,13 +73,16 @@ def fetch_county(fips):
 
     layers = {"fema_zones": (config.FEMA_ZONES, "FLD_ZONE,ZONE_SUBTY,DFIRM_ID")}
     layers.update({name: (f"{config.DWR_BAM}/{num}", "*") for name, num in config.DWR_LAYERS.items()})
+    layers.update({name: (url, f"{field},V_DATUM,LEN_UNIT") for name, (url, field) in config.FEMA_LEVEL_LINES.items()})
+    layers["fema_zone_levels"] = (config.FEMA_ZONES, f"{config.FEMA_ZONE_LEVEL_FIELD},V_DATUM,LEN_UNIT")
     layers["nld_leveed_areas"] = (config.NLD_LEVEED_AREAS, "SYSTEM_NAME,OVERTOPPING_ACE,FEMA_ACCREDITATION_RATING")
     if fips == config.LA_COUNTY:
         layers["mudflow_properties"] = (config.LA_MUDFLOW_PROPERTIES, "FIRE,FIRE_YEAR,PHASE1,PHASE2,PHASE3")
+    only = {"fema_zone_levels": f"{config.FEMA_ZONE_LEVEL_FIELD} > -999"}  # most zones have no level of their own
     for name, (url, fields) in layers.items():
         path = raw / f"{name}.geojson"
         if not path.exists():
-            log(f"  {fips} {name}: {download_layer(url, bbox, path, fields)} shapes")
+            log(f"  {fips} {name}: {download_layer(url, bbox, path, fields, only.get(name, '1=1'))} shapes")
 
     claims_path = raw / "claims.json"
     if not claims_path.exists():
@@ -197,6 +200,9 @@ def main(region):
     build_vrt(work / "elevation.vrt", [f"/vsicurl/{u}" for u in dem])
     log(f"elevation tiles: {len(dem)}")
     download_file(config.PRISM_ANNUAL_RAINFALL, config.RAW / "climate" / "prism_annual_rainfall.zip")
+    if any(oregon.is_oregon(fips) for fips in counties):
+        oregon.fetch(download_file)
+    download_file(config.VERTCON_WEST, config.VERTCON_PATH)
     if config.VALLEY_WATER_COUNTY in counties:
         fetch_valley_water_floods()
     if failed:

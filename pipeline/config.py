@@ -37,8 +37,19 @@ COUNTY_GROUPS = {
         "06051": "Mono", "06049": "Modoc", "06091": "Sierra", "06003": "Alpine",
     },
 }
-# A region is one group, or "california" for all of them; the website shows one region.
-REGIONS = {**COUNTY_GROUPS, "california": {fips: name for group in COUNTY_GROUPS.values() for fips, name in group.items()}}
+OREGON_COUNTIES = {  # state 41 = Oregon
+    "41001": "Baker", "41003": "Benton", "41005": "Clackamas", "41007": "Clatsop", "41009": "Columbia",
+    "41011": "Coos", "41013": "Crook", "41015": "Curry", "41017": "Deschutes", "41019": "Douglas",
+    "41021": "Gilliam", "41023": "Grant", "41025": "Harney", "41027": "Hood River", "41029": "Jackson",
+    "41031": "Jefferson", "41033": "Josephine", "41035": "Klamath", "41037": "Lake", "41039": "Lane",
+    "41041": "Lincoln", "41043": "Linn", "41045": "Malheur", "41047": "Marion", "41049": "Morrow",
+    "41051": "Multnomah", "41053": "Polk", "41055": "Sherman", "41057": "Tillamook", "41059": "Umatilla",
+    "41061": "Union", "41063": "Wallowa", "41065": "Wasco", "41067": "Washington", "41069": "Wheeler",
+    "41071": "Yamhill",
+}
+# A region is one group, or a whole state; the website shows both states, each from its own files.
+REGIONS = {**COUNTY_GROUPS, "oregon": OREGON_COUNTIES,
+           "california": {fips: name for group in COUNTY_GROUPS.values() for fips, name in group.items()}}
 
 # Counties modelled at once by `make build` (each can use a few GB of memory)
 BUILD_WORKERS = int(os.environ.get("BUILD_WORKERS", 3))
@@ -46,17 +57,22 @@ BUILD_WORKERS = int(os.environ.get("BUILD_WORKERS", 3))
 # Layers the website draws, and the zoom each first appears at. Anything else the model writes stays out of the
 # map file: the zoomed-out tiles cover a lot of ground and have a size limit.
 MAP_LAYERS = {
-    "fema_high": 5, "prelim_high": 5, "dwr_awareness": 5, "levee_often_overtopped": 5, "levee": 5,
+    "fema_high": 5, "paper_high": 5, "prelim_high": 5, "dwr_awareness": 5, "levee_often_overtopped": 5, "levee": 5,
     "terrain_elevated": 5, "terrain_moderate": 7, "coverage": 5,
     # Individual properties: too small to see before zoom 9
     "mudflow_higher": 9, "mudflow_elevated": 9, "mudflow_moderate": 9,
     "primo_elevated": 9, "primo_moderate": 9,
 }
 
+# Zoomed-out tiles, so both states show at once (about zoom 4.5 on most screens, under 4 on a phone held sideways).
+# They hold the layers that show from MAP_MIN_ZOOM, and are made separately and joined on.
+OVERVIEW_MIN_ZOOM = 3
+MAP_MIN_ZOOM = 5
+
 # Downloads stop before free disk space would fall below this
 MIN_FREE_DISK_GB = 15
 
-CRS = "EPSG:3310"  # California Albers, in metres
+CRS = "EPSG:3310"  # California Albers, in metres. Areas are exact, and distances within 1.2% as far as Oregon
 GRID_M = 30  # terrain grid
 COUNTY_MARGIN_DEG = 0.05  # download official zones about 5 km beyond each county line
 COUNTY_MARGIN_M = 3000  # and model terrain 3 km beyond it, so zones across the line still count
@@ -65,6 +81,18 @@ COUNTY_MARGIN_M = 3000  # and model terrain 3 km beyond it, so zones across the 
 DIST_PENALTY_M = 400  # 1 m of effective height per this many metres from a flood zone
 ELEV_ZONE_M, ELEV_CREEK_M = 1.0, 1.5  # Elevated: within this height of a zone's level / above a creek
 MOD_ZONE_M, MOD_CREEK_M = 3.0, 4.0  # Moderate: same, looser
+# A published flood level is only believed below the top of the dry bank: the highest ground outside the zone
+# within BANK_SEARCH_M of its edge, give or take BANK_TOLERANCE_M for the elevation data
+BANK_SEARCH_M = 90
+BANK_TOLERANCE_M = 0.5
+# Closed basins: the national creek-height data fills a basin with no outlet to its brim, so all of it reads exactly
+# 0 m, hills included. A patch of 0 m that is wide (FILLED_BASIN_WIDTH_M across, FILLED_BASIN_MIN_KM2 in all) and
+# spans more than FILLED_BASIN_MIN_RELIEF_M of real height is one; in it, height is measured above the lowest
+# ground within FILLED_BASIN_FLOOR_M instead. Real flats at creek level span less (5 m on Portland's Columbia flats).
+FILLED_BASIN_WIDTH_M = 150
+FILLED_BASIN_MIN_KM2 = 1.0
+FILLED_BASIN_MIN_RELIEF_M = 10
+FILLED_BASIN_FLOOR_M = 2000
 MIN_SOURCE_HA = 5  # only flood zones at least this big spread risk to nearby ground
 SHARP_TOL_M, LOOSE_TOL_M = 10, 30  # outline simplification: official zones / terrain and notes
 SINCE_YEAR = 1995
@@ -83,6 +111,13 @@ ARTIFICIAL_CHANNEL_TYPES = {"CanalDitch", "Pipeline"}  # flood insurance claims 
 
 # Data sources
 FEMA_ZONES = "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28"
+# FEMA's 100-year flood levels, drawn as lines across its zones: name -> (layer, the field holding the level)
+FEMA_LEVEL_LINES = {
+    "fema_cross_sections": ("https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/14", "WSEL_REG"),
+    "fema_level_lines": ("https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/16", "ELEV"),
+}
+# Zones FEMA gives one level each (the coast, lakes, ponding), in this field
+FEMA_ZONE_LEVEL_FIELD = "STATIC_BFE"
 DWR_BAM = "https://arcgis04.geiconsultants.com/arcgis/rest/services/BAM/BAM2025/MapServer"
 DWR_LAYERS = {"bam_6": 6, "bam_8": 8, "bam_14": 14}  # FEMA preliminary 1%, DWR awareness, FEMA preliminary 0.2%
 # Army Corps National Levee Database: the land each levee protects, with its yearly overtopping chance
@@ -91,6 +126,9 @@ NLD_LEVEED_AREAS = "https://geospatial.sec.usace.army.mil/dls/rest/services/NLD/
 # (0.5%, 1%, 2%, 5%...), and levees built to the 100-year standard sit in the 1% step, so 2% means "more often
 # than the 100-year standard".
 LEVEE_HIGHER_OVERTOPPING = 0.02
+# NOAA VERTCON: what to add to a height above the older NGVD29 datum to get one above NAVD88 (western US)
+VERTCON_WEST = "https://cdn.proj.org/us_noaa_vertconw.tif"
+VERTCON_PATH = RAW / "datum" / "us_noaa_vertconw.tif"
 TIGER_COUNTY = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer/13/query"
 TIGER_WATER = "https://www2.census.gov/geo/tiger/TIGER2025/AREAWATER/tl_2025_{fips}_areawater.zip"
 MIN_WATER_KM2 = 1.0  # water bodies at least this big (Bay, ocean, big reservoirs) are cut out of the map
@@ -137,6 +175,30 @@ PRIMO_DEPTHS = PRIMO_DIR / "primo_flooddepth_table.csv"
 PRIMO_DEEP_M = 0.3  # deeper than this in the 1-in-20-year storm is Elevated
 PRIMO_SHALLOW_M = 0.1  # deeper than this in the 1-in-100-year storm is Moderate
 LA_PARCELS = "https://public.gis.lacounty.gov/public/rest/services/LACounty_Cache/LACounty_Parcel/MapServer/0"
+
+
+# Oregon (see oregon.py)
+OREGON_STATE_FIPS = "41"
+OREGON_BOUNDS = (-124.8, 41.8, -116.3, 46.4)
+OREGON_DIR = RAW / "oregon"
+OREGON_FLOOD_DATABASE = "https://ftp.gis.oregon.gov/framework/hazards/Oregon_Statewide_Flood_Hazards.zip"
+OREGON_GDB = OREGON_DIR / "Oregon_Statewide_Flood_Hazards.gdb"
+OREGON_PAST_FLOOD = {"layer": "NW_Oregon_1996_Inundation", "year": 1996, "source": "Army Corps of Engineers"}
+PAPER_MAP_SOURCE = "FEMA FIRM"  # the database's copies of newer, digital maps say "FEMA DFIRM"
+NOT_MAPPED_LABELS = ("D", "AREA NOT INCLUDED", "ANI")
+DIGITAL_MAP_SEAM_M = 5
+_PRELIMINARY = "https://hazards.fema.gov/arcgis/rest/services/PrelimPending/Prelim_NFHL/MapServer"
+_PENDING = "https://hazards.fema.gov/arcgis/rest/services/PrelimPending/Pending_NFHL/MapServer"
+OREGON_UPCOMING = {  # name -> (layer, fields)
+    "preliminary_zones": (f"{_PRELIMINARY}/21", "FLD_ZONE,DFIRM_ID"),
+    "preliminary_cross_sections": (f"{_PRELIMINARY}/14", "WSEL_REG,V_DATUM,LEN_UNIT"),
+    "preliminary_level_lines": (f"{_PRELIMINARY}/16", "ELEV,V_DATUM,LEN_UNIT"),
+    "pending_zones": (f"{_PENDING}/34", "FLD_ZONE,DFIRM_ID"),
+    "pending_cross_sections": (f"{_PENDING}/14", "WSEL_REG,V_DATUM,LEN_UNIT"),
+    "pending_level_lines": (f"{_PENDING}/16", "ELEV,V_DATUM,LEN_UNIT"),
+}
+OREGON_UPCOMING_LEVELS = {"preliminary_cross_sections": "WSEL_REG", "preliminary_level_lines": "ELEV",
+                          "pending_cross_sections": "WSEL_REG", "pending_level_lines": "ELEV"}
 
 
 def county_raw(fips):

@@ -147,3 +147,416 @@ def test_primo_parcels_get_a_level_by_depth_and_storm():
     for name, shapes in layers.items():
         assert (shapes.expected == name).all(), name
     assert sum(len(shapes) for shapes in layers.values()) == len(listed)  # the dry parcel is left out
+
+
+def test_steep_bank_is_judged_against_the_published_flood_level():
+    ground_m, zone, levee, above_creek_m = grid()
+    ground_m[:, :30] = 3.0  # the river's surface, which is what the zone's edge cells hold at a seawall
+    ground_m[:, 30:] = 10.5
+    ground_m[:, 60:] = 20.0  # a bluff further back
+    published = np.where(zone, 10.0, np.nan)  # FEMA's 100-year flood level
+    level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, published_flood_m=published)
+    assert level[20, 31] == ELEVATED  # half a metre above the flood, though 7.5 m above the river
+    assert level[20, 45] == MODERATE  # 480 m back adds 1.2 m
+    assert level[20, 61] == LOWER
+
+
+def test_published_flood_level_never_makes_ground_safer():
+    ground_m, zone, levee, above_creek_m = grid()
+    ground_m[:, 30:] = 10.5
+    published = np.where(zone, 4.0, np.nan)  # below the ground at the zone's edge
+    level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, published_flood_m=published)
+    assert (level == classify(ground_m, zone, levee, above_creek_m, CELL_M)[0]).all()
+
+
+def test_a_published_level_above_the_dry_bank_is_not_believed():
+    ground_m, zone, levee, above_creek_m = grid()
+    ground_m[:, :30] = 3.0
+    ground_m[:, 30:] = 10.5
+    published = np.where(zone, 15.0, np.nan)  # a level from upstream: this would have flooded the bank FEMA shows dry
+    level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, published_flood_m=published)
+    assert (level == classify(ground_m, zone, levee, above_creek_m, CELL_M)[0]).all()
+
+
+def river_with_lines(*levels):
+    """A river 60 cells long with a flood level line across it at columns 10, 30 and so on, and a second river
+    a short way off over dry ground with no lines."""
+    zone = np.zeros((20, 60), dtype=bool)
+    zone[2:5, :] = True
+    zone[8:11, :] = True
+    line_at = np.zeros(zone.shape, dtype=np.int32)  # 0 for none, else the line's position in `levels` plus one
+    for number, _ in enumerate(levels, start=1):
+        line_at[1:6, 10 + 20 * (number - 1)] = number
+    return line_at, np.array(levels), zone
+
+
+def test_between_two_lines_the_flood_is_at_least_the_downstream_level():
+    from pipeline.model import levels_between_lines
+
+    levels = levels_between_lines(*river_with_lines(10.0, 14.0))
+    assert (levels[2:5, 10:31] == 10.0).all()  # never the upstream level, which would be too high further down
+
+
+def test_lines_with_the_same_level_still_bound_a_stretch():
+    from pipeline.model import levels_between_lines
+
+    assert (levels_between_lines(*river_with_lines(10.0, 10.0))[2:5, 11:30] == 10.0).all()
+
+
+def test_flood_levels_stop_at_the_last_line_and_stay_in_their_own_river():
+    from pipeline.model import levels_between_lines
+
+    levels = levels_between_lines(*river_with_lines(10.0, 14.0))
+    assert np.isnan(levels[2:5, :10]).all()
+    assert np.isnan(levels[2:5, 31:]).all()
+    assert np.isnan(levels[8:11]).all()
+    assert np.isnan(levels[1]).all()  # where a line pokes out of the zone
+
+
+def test_a_mistyped_level_is_outvoted_by_its_neighbours():
+    from pipeline.model import levels_between_lines
+
+    levels = levels_between_lines(*river_with_lines(10.0, 977.0, 14.0))
+    assert np.nanmax(levels) == 14.0
+
+
+def test_flood_level_lines_are_metres_above_the_same_datum_as_the_ground():
+    import geopandas as gpd
+    from shapely.geometry import LineString
+    from pipeline.model import usable_flood_levels
+
+    rows = [  # level, datum, unit
+        (100.0, "NAVD88", "Feet"),
+        (12.0, "NAVD88", "Meters"),
+        (100.0, "NGVD29", "Feet"),  # an older datum, about a metre different in Oregon
+        (100.0, "NP", "Feet"),  # no datum given
+        (-9999.0, "NAVD88", "Feet"),  # FEMA's "no value"
+        (100.0, "NAVD88", "NP"),
+        (None, "NAVD88", "Feet"),
+    ]
+    lines = gpd.GeoDataFrame([dict(ELEV=e, V_DATUM=d, LEN_UNIT=u) for e, d, u in rows],
+                             geometry=[LineString([(i, 0), (i, 1)]) for i in range(len(rows))])
+    to_navd88_m = np.full(len(rows), 1.05)
+    assert [round(m, 2) for _, m in usable_flood_levels(lines, "ELEV", to_navd88_m)] == [30.48, 12.0, 31.53]
+
+
+def test_published_levels_are_read_from_the_downloaded_lines(tmp_path):
+    import geopandas as gpd
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString
+    from pipeline.model import _published_flood_levels
+
+    zone = np.zeros((20, 60), dtype=bool)
+    zone[5:10, :] = True
+    transform = from_origin(0, 600, CELL_M, CELL_M)
+    (sections, (_, section_field)), (others, _) = config.FEMA_LEVEL_LINES.items()
+    (tmp_path / f"{others}.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+    (tmp_path / "fema_zone_levels.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+
+    def write_sections(*rows):
+        gpd.GeoDataFrame([{section_field: feet, "V_DATUM": "NAVD88", "LEN_UNIT": "Feet"} for _, feet in rows],
+                         geometry=[LineString([(x, 240), (x, 480)]) for x, _ in rows],
+                         crs=config.CRS).to_crs(4326).to_file(tmp_path / f"{sections}.geojson", driver="GeoJSON")
+
+    write_sections((315, 100.0), (915, 110.0))
+    assert np.isclose(_published_flood_levels(tmp_path, zone, transform)[7, 20], 30.48)
+    (tmp_path / f"{sections}.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+    assert np.isnan(_published_flood_levels(tmp_path, zone, transform)).all()  # a county with no detailed study
+
+
+def test_a_zone_with_a_level_of_its_own_uses_it(tmp_path):
+    import geopandas as gpd
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString, box
+    from pipeline.model import _published_flood_levels
+
+    zone = np.zeros((20, 60), dtype=bool)
+    zone[5:10, :] = True
+    transform = from_origin(0, 600, CELL_M, CELL_M)
+    (sections, (_, section_field)), (others, _) = config.FEMA_LEVEL_LINES.items()
+    (tmp_path / f"{others}.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+    gpd.GeoDataFrame([{section_field: 10.0, "V_DATUM": "NAVD88", "LEN_UNIT": "Feet"}] * 2,
+                     geometry=[LineString([(x, 240), (x, 480)]) for x in (315, 1515)],
+                     crs=config.CRS).to_crs(4326).to_file(tmp_path / f"{sections}.geojson", driver="GeoJSON")
+    # Part of the zone is a wave zone on the coast, which FEMA gives one level
+    gpd.GeoDataFrame([{"STATIC_BFE": 30.0, "V_DATUM": "NAVD88", "LEN_UNIT": "Feet"}],
+                     geometry=[box(450, 300, 900, 450)],
+                     crs=config.CRS).to_crs(4326).to_file(tmp_path / "fema_zone_levels.geojson", driver="GeoJSON")
+    levels = _published_flood_levels(tmp_path, zone, transform)
+    assert np.isclose(levels[7, 20], 9.144)  # its own level, not the lower one from the lines either side
+    assert np.isclose(levels[7, 40], 3.048)
+
+
+def test_only_flood_zone_labels_count_as_flood_zones():
+    import pandas as pd
+    from pipeline.model import is_flood_zone
+
+    expected = {"A": True, "AE": True, "AH": True, "AO": True, "AR": True, "AR/AE": True, "A4": True, "A22": True,
+                "V": True, "VE": True, "VO": True, "V12": True,
+                "AREA NOT INCLUDED": False, "ANI": False, "A99": False, "X": False, "D": False, "OPEN WATER": False,
+                "0.2 PCT ANNUAL CHANCE FLOOD HAZARD": False, "": False}
+    assert dict(zip(expected, is_flood_zone(pd.Series(list(expected))))) == expected
+
+
+def test_older_datum_levels_are_converted_with_noaas_grid(tmp_path):
+    import geopandas as gpd
+    import rasterio
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString
+    from pipeline.model import ngvd29_to_navd88_m
+
+    grid_path = tmp_path / "vertcon.tif"
+    with rasterio.open(grid_path, "w", driver="GTiff", width=2, height=1, count=1, dtype="float32",
+                       crs="EPSG:4267", transform=from_origin(-124, 46, 1, 1)) as dst:
+        dst.write(np.array([[1.1, 0.8]], dtype=np.float32), 1)
+    lines = gpd.GeoSeries([LineString([(-123.6, 45.4), (-123.4, 45.6)]),  # in the grid's west cell
+                           LineString([(-122.6, 45.4), (-122.4, 45.6)])],  # and in its east cell
+                          crs=4326).to_crs(config.CRS)
+    assert np.allclose(ngvd29_to_navd88_m(lines, grid_path), [1.1, 0.8])
+
+
+def test_units_count_however_they_are_capitalised():
+    import geopandas as gpd
+    from shapely.geometry import LineString
+    from pipeline.model import usable_flood_levels
+
+    lines = gpd.GeoDataFrame([dict(ELEV=100.0, V_DATUM="NAVD88", LEN_UNIT="FEET")],  # as Oregon's database has it
+                             geometry=[LineString([(0, 0), (0, 1)])])
+    assert [round(m, 2) for _, m in usable_flood_levels(lines, "ELEV", np.zeros(1))] == [30.48]
+
+
+def test_paper_maps_only_fill_in_where_fema_has_no_digital_map():
+    import geopandas as gpd
+    from shapely.geometry import box
+    from pipeline.oregon import paper_zones_without_digital_map
+
+    paper = gpd.GeoDataFrame(
+        {"FLD_ZONE": ["A", "A4", "X", "AE"],
+         "SOURCE": ["FEMA FIRM - Grant County 19820518"] * 3 + ["FEMA DFIRM - Jackson County 20110503"]},
+        geometry=[box(0, 0, 4000, 100), box(0, 1000, 4000, 1100), box(0, 2000, 4000, 2100), box(0, 3000, 4000, 3100)],
+        crs=config.CRS)
+    digital = gpd.GeoDataFrame(
+        {"FLD_ZONE": ["X", "AE", "D"]},
+        # two zones with a 4 m seam between them (the server simplifies shapes), and an "undetermined" one
+        geometry=[box(0, -50, 1000, 1200), box(1004, -50, 2000, 1200), box(3000, -50, 4000, 1200)],
+        crs=config.CRS)
+    filled = paper_zones_without_digital_map(paper, digital)
+    assert set(filled.FLD_ZONE) == {"A", "A4"}  # only flood zones, and only those from paper maps
+    for (minx, _, maxx, _) in filled.geometry.bounds.itertuples(index=False):
+        assert abs(minx - 2000) < 6 and abs(maxx - 4000) < 6  # not over the digital map, or in its seams
+
+
+def test_every_oregon_county_is_in_the_oregon_region():
+    assert list(config.REGIONS["oregon"]) == [f"41{n:03d}" for n in range(1, 72, 2)]
+    assert not any(fips.startswith("41") for fips in config.REGIONS["california"])
+
+
+def test_a_failed_elevation_download_leaves_nothing_to_reuse(tmp_path, monkeypatch):
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+    from shapely.geometry import box
+    from pipeline import model
+
+    def dropped_connection(command, **options):
+        Path(command[-1]).write_bytes(b"half a file")
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(config, "WORK", tmp_path)
+    monkeypatch.setattr(model.subprocess, "run", dropped_connection)
+    (tmp_path / "counties" / "41019").mkdir(parents=True)
+    with pytest.raises(subprocess.CalledProcessError):
+        model._ground_elevation("oregon", "41019", box(0, 0, 100, 100))
+    assert not (tmp_path / "counties" / "41019" / "elevation30.tif").exists()
+
+
+def test_hills_inside_a_filled_in_closed_basin_are_not_at_creek_level():
+    from pipeline.model import without_filled_basins
+
+    ground_m = np.full((100, 300), 100.0, dtype=np.float32)
+    ground_m[:, 100:200] = 100 + np.arange(100) * 0.5  # up from the basin's floor
+    ground_m[:, 200:] = 150.0
+    above_creek_m = np.full(ground_m.shape, 20.0, dtype=np.float32)
+    above_creek_m[:, :200] = 0.0  # the national data fills the basin to the brim
+    fixed = without_filled_basins(above_creek_m, ground_m, CELL_M)
+    assert (fixed[:, :99] < config.ELEV_CREEK_M).all()  # the floor, where water collects, is still low ground
+    assert (fixed[:, 115:200] >= config.MOD_CREEK_M).all()  # the hillside isn't
+    assert (fixed[:, 200:] == 20.0).all()
+
+
+def test_shallow_flats_at_creek_level_are_left_alone():
+    from pipeline.model import without_filled_basins
+
+    ground_m = np.tile(np.linspace(10, 15, 200, dtype=np.float32), (100, 1))  # like Portland's Columbia flats
+    above_creek_m = np.zeros(ground_m.shape, dtype=np.float32)
+    assert (without_filled_basins(above_creek_m, ground_m, CELL_M) == 0).all()
+
+
+def test_overview_tiles_add_zoomed_out_levels_without_changing_the_rest(tmp_path):
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+    from pipeline import build
+
+    if not shutil.which("tippecanoe"):
+        pytest.skip("needs tippecanoe")
+
+    def square(layer, west):
+        ring = [[west, 44], [west + 1, 44], [west + 1, 45], [west, 45], [west, 44]]
+        return json.dumps({"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [ring]},
+                           "tippecanoe": {"layer": layer, "minzoom": config.MAP_LAYERS[layer]}})
+
+    shapes, tiles = tmp_path / "risk.geojsonseq", tmp_path / "risk.pmtiles"
+    shapes.write_text("\n".join([square("fema_high", -123), square("terrain_moderate", -121)]) + "\n")
+    build.tippecanoe(shapes, tiles)
+
+    def decoded(*options):
+        out = subprocess.run(["tippecanoe-decode", "-c", *options, str(tiles)], capture_output=True, text=True, check=True)
+        return sorted(line for line in out.stdout.splitlines() if '"Feature"' in line and "FeatureCollection" not in line)
+
+    before = decoded("-Z5", "-z9")
+    build.add_overview(shapes, tiles)
+    assert decoded("-Z5", "-z9") == before
+    for zoom in range(config.OVERVIEW_MIN_ZOOM, 5):
+        assert decoded(f"-Z{zoom}", f"-z{zoom}", "-l", "fema_high")  # shows when zoomed right out
+        assert not decoded(f"-Z{zoom}", f"-z{zoom}", "-l", "terrain_moderate")  # still only from zoom 7
+
+
+def test_the_local_server_says_when_a_map_file_has_been_replaced(tmp_path):
+    import threading
+    from functools import partial
+    from http.server import ThreadingHTTPServer
+    from urllib.request import ProxyHandler, Request, build_opener
+
+    from pipeline.serve import RangeRequestHandler
+
+    tiles = tmp_path / "risk.pmtiles"
+    tiles.write_bytes(b"first version")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(RangeRequestHandler, directory=str(tmp_path)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def etag():
+        request = Request(f"http://127.0.0.1:{server.server_port}/risk.pmtiles", headers={"Range": "bytes=0-3"})
+        with build_opener(ProxyHandler({})).open(request, timeout=5) as response:
+            return response.headers["ETag"]
+
+    first = etag()
+    assert first and not first.startswith("W/")  # the map library ignores weak tags
+    assert etag() == first
+    tiles.write_bytes(b"a second, longer version")
+    assert etag() != first
+    server.shutdown()
+    server.server_close()
+
+
+def test_fetching_a_county_asks_fema_for_its_flood_levels(tmp_path, monkeypatch):
+    import geopandas as gpd
+    from shapely.geometry import box
+    from pipeline import fetch
+
+    asked = {}
+
+    def download_layer(url, bbox, path, fields, where="1=1"):
+        asked[path.stem] = (fields, where)
+        return 0
+
+    monkeypatch.setattr(config, "RAW", tmp_path)
+    (tmp_path / "counties" / "41041").mkdir(parents=True)
+    monkeypatch.setattr(fetch, "fetch_county_outline",
+                        lambda fips: gpd.GeoDataFrame(geometry=[box(-124, 44, -123, 45)], crs=4326))
+    monkeypatch.setattr(fetch, "download_layer", download_layer)
+    monkeypatch.setattr(fetch, "download_file", lambda url, path: None)
+    monkeypatch.setattr(fetch, "get_json", lambda *args: {"NfipClaims": []})
+    fetch.fetch_county("41041")
+    for name, (_, field) in config.FEMA_LEVEL_LINES.items():
+        assert asked[name] == (f"{field},V_DATUM,LEN_UNIT", "1=1")
+    assert asked["fema_zone_levels"][1] == f"{config.FEMA_ZONE_LEVEL_FIELD} > -999"
+
+
+def test_an_oregon_county_fema_never_digitised_gets_its_paper_map(tmp_path, monkeypatch):
+    """From the state's database to the map layers, past floods and checks, on a made-up county."""
+    import json
+    import shutil
+    import zipfile
+
+    import geopandas as gpd
+    import pytest
+    import rasterio
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString, box
+    from pipeline import history, model, oregon, validate
+
+    if not shutil.which("gdal_contour"):
+        pytest.skip("needs GDAL's command-line tools")
+
+    fips = "41061"
+    west, south = gpd.GeoSeries.from_xy([-117.9], [45.3], crs=4326).to_crs(config.CRS).total_bounds[:2]
+    shape, transform = (80, 80), from_origin(west, south + 2400, CELL_M, CELL_M)
+    land = box(west, south, west + 2400, south + 2400)
+    paper = box(west, south, west + 600, south + 2400)  # the paper map's flood zone: the west quarter
+    ground_m = np.full(shape, 103.0, dtype=np.float32)
+    ground_m[:, :20] = 98.0  # river level at the foot of a bank
+
+    state = tmp_path / "state" / "Oregon_Statewide_Flood_Hazards.gdb"
+    state.parent.mkdir()
+
+    def write(layer, rows, shapes, **options):
+        gpd.GeoDataFrame(rows, geometry=shapes, crs=config.CRS).to_crs(2992).to_file(
+            state, layer=layer, driver="OpenFileGDB", **options)
+
+    write("FEMA_FLD_HAZ_AR", [{"FLD_ZONE": "A", "SOURCE": "FEMA FIRM - Union County 19800515"}], [paper])
+    write("FEMA_BFE", [{"ELEV": 102.5 / 0.3048, "V_DATUM": "NAVD88", "LEN_UNIT": "FEET"}] * 2,
+          [LineString([(west - 60, south + y), (west + 660, south + y)]) for y in (45, 2355)], mode="a")
+    write(config.OREGON_PAST_FLOOD["layer"], [{"WTR_NM": "Grande Ronde River"}], [paper], mode="a")
+
+    def download_file(url, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(path, "w") as zipped:
+            for part in state.rglob("*"):
+                zipped.write(part, part.relative_to(state.parent))
+
+    def download_layer(url, bbox, path, fields, where):
+        path.write_text('{"type": "FeatureCollection", "features": []}')
+        return 0
+
+    raw, work = tmp_path / "raw", tmp_path / "work"
+    monkeypatch.setattr(config, "RAW", raw)
+    monkeypatch.setattr(config, "WORK", work)
+    monkeypatch.setattr(config, "OREGON_DIR", raw / "oregon")
+    monkeypatch.setattr(config, "OREGON_GDB", raw / "oregon" / state.name)
+    monkeypatch.setattr(oregon, "download_layer", download_layer)
+    oregon.fetch(download_file)
+
+    county = config.county_raw(fips)
+    county.mkdir(parents=True)
+    for name in ("fema_zones", "nld_leveed_areas", "bam_6", "bam_8", "bam_14", "fema_zone_levels",
+                 *config.FEMA_LEVEL_LINES):
+        (county / f"{name}.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+    (county / "claims.json").write_text("[]")
+    (tmp_path / "bg").mkdir()
+    gpd.GeoDataFrame([{"GEOID10": "410619701001"}], geometry=[land], crs=config.CRS).to_file(
+        tmp_path / "bg" / f"tl_2010_{fips}_bg10.shp")
+    with zipfile.ZipFile(county / f"tl_2010_{fips}_bg10.zip", "w") as zipped:
+        for part in (tmp_path / "bg").iterdir():
+            zipped.write(part, part.name)
+
+    monkeypatch.setattr(model, "_land_outline", lambda fips: land)
+    monkeypatch.setattr(model, "_ground_elevation", lambda *args: (ground_m, transform))
+    monkeypatch.setattr(model, "_height_above_creek", lambda *args: np.full(shape, 50.0, dtype=np.float32))
+    monkeypatch.setattr(model, "_channel_ignored", lambda *args: np.zeros(shape, dtype=bool))
+    model.run("oregon", fips, "Union")
+
+    with rasterio.open(config.county_work(fips) / "level.tif") as src:
+        level = src.read(1) >> model.LEVEL_SHIFT
+    assert (level[:, :20] == HIGHER).all()  # inside the paper map's zone
+    assert level[40, 21] == ELEVATED  # half a metre above the level that map publishes, not 5 m above the river
+    assert '"paper_high"' in (config.county_work(fips) / "risk.geojsonseq").read_text()
+
+    out = tmp_path / "history.geojsonseq"
+    history.write_layers([fips], out)
+    flood = json.loads(out.read_text().splitlines()[0])["properties"]
+    assert flood == {"year": 1996, "source": "Army Corps of Engineers", "creek": "Grande Ronde River"}
+    assert validate.check_county(fips)["floods"]["1996"]["higher"] == 100

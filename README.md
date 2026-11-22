@@ -1,8 +1,8 @@
-# California Flood Risk Map: "How worried should I be about flooding?"
+# California and Oregon Flood Risk Map: "How worried should I be about flooding?"
 
 A free website where someone types their address and sees how worried to be about flooding where they
 live: a colour-coded map with a one-line reason for any spot, plus a page on what to do about it. It
-covers all of California.
+covers all of California and Oregon.
 
 - **What it shows:** four levels (Higher, Elevated, Moderate, Lower) built from FEMA's and California's
   studied creek flood zones plus the shape of the land, with past floods and flood insurance claims
@@ -74,6 +74,10 @@ uses small pages and retries; a full Bay Area fetch takes a while.
 
 | Data | Source |
 |---|---|
+| 100-year flood levels (cross-sections, level lines, coastal and lake zones) | FEMA National Flood Hazard Layer (map service) |
+| Oregon: digitised paper FEMA maps, February 1996 flood | State of Oregon, Statewide Flood Hazard Database |
+| Oregon: preliminary and pending zones | FEMA preliminary and pending map services |
+| Conversion from the 1929 height datum to 1988's | NOAA VERTCON, via PROJ |
 | Flood hazard zones | FEMA National Flood Hazard Layer (map service) |
 | Preliminary FEMA zones, DWR awareness floodplains | California DWR Best Available Maps 2025 |
 | Height above nearest creek, 10 m | National Flood Interoperability Experiment (TACC), one file per river basin |
