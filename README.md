@@ -75,6 +75,7 @@ uses small pages and retries; a full Bay Area fetch takes a while.
 | Data | Source |
 |---|---|
 | 100-year flood levels (cross-sections, level lines, coastal and lake zones) | FEMA National Flood Hazard Layer (map service) |
+| Conversion from the 1929 height datum to 1988's | NOAA VERTCON, via PROJ |
 | Flood hazard zones | FEMA National Flood Hazard Layer (map service) |
 | Preliminary FEMA zones, DWR awareness floodplains | California DWR Best Available Maps 2025 |
 | Height above nearest creek, 10 m | National Flood Interoperability Experiment (TACC), one file per river basin |

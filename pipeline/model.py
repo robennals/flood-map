@@ -109,14 +109,22 @@ def _bank_top(ground_m, zone, cell_m):
     return maximum_filter(dry_ground_m, size=2 * round(config.BANK_SEARCH_M / cell_m) + 1, mode="nearest")
 
 
-def usable_flood_levels(shapes, field):
-    """(shape, level in metres) for shapes with a usable level. Only levels above NAVD88, the datum of the ground
-    heights: the older NGVD29 differs from it by up to about a metre on the West Coast."""
+def ngvd29_to_navd88_m(shapes, grid_path):
+    """What to add to each shape's height above the older NGVD29 datum to get one above NAVD88 (NOAA VERTCON)."""
+    with rasterio.open(grid_path) as grid:
+        points = gpd.GeoSeries(shapes.representative_point(), crs=shapes.crs).to_crs(grid.crs)
+        return np.array([offset[0] for offset in grid.sample(zip(points.x, points.y))])
+
+
+def usable_flood_levels(shapes, field, to_navd88_m):
+    """(shape, level in metres above NAVD88, the datum of the ground heights) for shapes with a usable level.
+    to_navd88_m: what to add for each shape if its level is above the older NGVD29."""
     usable = []
-    for shape, value, datum, unit in zip(shapes.geometry, shapes[field], shapes.V_DATUM, shapes.LEN_UNIT):
+    for shape, value, datum, unit, offset in zip(shapes.geometry, shapes[field], shapes.V_DATUM, shapes.LEN_UNIT,
+                                                 to_navd88_m):
         metres = LENGTH_UNITS_M.get(unit)
-        if shape is not None and datum == "NAVD88" and metres and value is not None and value > NO_LEVEL:
-            usable.append((shape, value * metres))
+        if shape is not None and datum in ("NAVD88", "NGVD29") and metres and value is not None and value > NO_LEVEL:
+            usable.append((shape, value * metres + (offset if datum == "NGVD29" else 0)))
     return usable
 
 
@@ -289,8 +297,14 @@ def _published_flood_levels(raw, studied_zone, transform):
     lakes), otherwise from the lines levels are published on along rivers."""
     def read_levels(name, field):
         shapes = gpd.read_file(raw / f"{name}.geojson")
-        # a county with no detailed study has none
-        return usable_flood_levels(shapes.to_crs(config.CRS), field) if len(shapes) else []
+        if not len(shapes):  # a county with no detailed study has none
+            return []
+        shapes = shapes[shapes.geometry.notna()].to_crs(config.CRS)
+        older = (shapes.V_DATUM == "NGVD29").to_numpy()
+        to_navd88_m = np.zeros(len(shapes))
+        if older.any():
+            to_navd88_m[older] = ngvd29_to_navd88_m(shapes.geometry[older], config.VERTCON_PATH)
+        return usable_flood_levels(shapes, field, to_navd88_m)
 
     level_m = np.full(studied_zone.shape, np.nan)
     lines = [line for name, (_, field) in config.FEMA_LEVEL_LINES.items() for line in read_levels(name, field)]

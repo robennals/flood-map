@@ -102,6 +102,9 @@ NLD_LEVEED_AREAS = "https://geospatial.sec.usace.army.mil/dls/rest/services/NLD/
 # (0.5%, 1%, 2%, 5%...), and levees built to the 100-year standard sit in the 1% step, so 2% means "more often
 # than the 100-year standard".
 LEVEE_HIGHER_OVERTOPPING = 0.02
+# NOAA VERTCON: what to add to a height above the older NGVD29 datum to get one above NAVD88 (western US)
+VERTCON_WEST = "https://cdn.proj.org/us_noaa_vertconw.tif"
+VERTCON_PATH = RAW / "datum" / "us_noaa_vertconw.tif"
 TIGER_COUNTY = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer/13/query"
 TIGER_WATER = "https://www2.census.gov/geo/tiger/TIGER2025/AREAWATER/tl_2025_{fips}_areawater.zip"
 MIN_WATER_KM2 = 1.0  # water bodies at least this big (Bay, ocean, big reservoirs) are cut out of the map

@@ -229,13 +229,15 @@ def test_flood_level_lines_are_metres_above_the_same_datum_as_the_ground():
         (100.0, "NAVD88", "Feet"),
         (12.0, "NAVD88", "Meters"),
         (100.0, "NGVD29", "Feet"),  # an older datum, about a metre different in Oregon
+        (100.0, "NP", "Feet"),  # no datum given
         (-9999.0, "NAVD88", "Feet"),  # FEMA's "no value"
         (100.0, "NAVD88", "NP"),
         (None, "NAVD88", "Feet"),
     ]
     lines = gpd.GeoDataFrame([dict(ELEV=e, V_DATUM=d, LEN_UNIT=u) for e, d, u in rows],
                              geometry=[LineString([(i, 0), (i, 1)]) for i in range(len(rows))])
-    assert [round(m, 2) for _, m in usable_flood_levels(lines, "ELEV")] == [30.48, 12.0]
+    to_navd88_m = np.full(len(rows), 1.05)
+    assert [round(m, 2) for _, m in usable_flood_levels(lines, "ELEV", to_navd88_m)] == [30.48, 12.0, 31.53]
 
 
 def test_published_levels_are_read_from_the_downloaded_lines(tmp_path):
@@ -294,3 +296,20 @@ def test_only_flood_zone_labels_count_as_flood_zones():
                 "AREA NOT INCLUDED": False, "ANI": False, "A99": False, "X": False, "D": False, "OPEN WATER": False,
                 "0.2 PCT ANNUAL CHANCE FLOOD HAZARD": False, "": False}
     assert dict(zip(expected, is_flood_zone(pd.Series(list(expected))))) == expected
+
+
+def test_older_datum_levels_are_converted_with_noaas_grid(tmp_path):
+    import geopandas as gpd
+    import rasterio
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString
+    from pipeline.model import ngvd29_to_navd88_m
+
+    grid_path = tmp_path / "vertcon.tif"
+    with rasterio.open(grid_path, "w", driver="GTiff", width=2, height=1, count=1, dtype="float32",
+                       crs="EPSG:4267", transform=from_origin(-124, 46, 1, 1)) as dst:
+        dst.write(np.array([[1.1, 0.8]], dtype=np.float32), 1)
+    lines = gpd.GeoSeries([LineString([(-123.6, 45.4), (-123.4, 45.6)]),  # in the grid's west cell
+                           LineString([(-122.6, 45.4), (-122.4, 45.6)])],  # and in its east cell
+                          crs=4326).to_crs(config.CRS)
+    assert np.allclose(ngvd29_to_navd88_m(lines, grid_path), [1.1, 0.8])

@@ -200,6 +200,7 @@ def main(region):
     build_vrt(work / "elevation.vrt", [f"/vsicurl/{u}" for u in dem])
     log(f"elevation tiles: {len(dem)}")
     download_file(config.PRISM_ANNUAL_RAINFALL, config.RAW / "climate" / "prism_annual_rainfall.zip")
+    download_file(config.VERTCON_WEST, config.VERTCON_PATH)
     if config.VALLEY_WATER_COUNTY in counties:
         fetch_valley_water_floods()
     if failed:
