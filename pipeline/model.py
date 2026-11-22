@@ -49,7 +49,7 @@ LEVEL_SHIFT = 12  # level.tif stores level << 12
 FLOOD_ZONE_LABEL = r"A|AE|AH|AO|AR(?:/.+)?|A(?!99$)\d+|V|VE|VO|V\d+"
 LENGTH_UNITS_M = {"Feet": 0.3048, "Meters": 1.0}
 NO_LEVEL = -999  # FEMA writes -9999 and similar where there is no value
-LOOSE_LAYERS = {"terrain_elevated", "terrain_moderate", "undetermined", "note_fema_500", "coverage"}
+LOOSE_LAYERS = {"terrain_elevated", "terrain_moderate", "undetermined", "note_fema_500"}  # not coverage: waterfront homes are within 30 m of its edge
 GDAL_REMOTE_ENV = {"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR", "GDAL_HTTP_MAX_RETRY": "5", "GDAL_HTTP_RETRY_DELAY": "5"}
 
 
