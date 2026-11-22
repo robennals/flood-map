@@ -80,6 +80,14 @@ MOD_ZONE_M, MOD_CREEK_M = 3.0, 4.0  # Moderate: same, looser
 # within BANK_SEARCH_M of its edge, give or take BANK_TOLERANCE_M for the elevation data
 BANK_SEARCH_M = 90
 BANK_TOLERANCE_M = 0.5
+# Closed basins: the national creek-height data fills a basin with no outlet to its brim, so all of it reads exactly
+# 0 m, hills included. A patch of 0 m that is wide (FILLED_BASIN_WIDTH_M across, FILLED_BASIN_MIN_KM2 in all) and
+# spans more than FILLED_BASIN_MIN_RELIEF_M of real height is one; in it, height is measured above the lowest
+# ground within FILLED_BASIN_FLOOR_M instead. Real flats at creek level span less (5 m on Portland's Columbia flats).
+FILLED_BASIN_WIDTH_M = 150
+FILLED_BASIN_MIN_KM2 = 1.0
+FILLED_BASIN_MIN_RELIEF_M = 10
+FILLED_BASIN_FLOOR_M = 2000
 MIN_SOURCE_HA = 5  # only flood zones at least this big spread risk to nearby ground
 SHARP_TOL_M, LOOSE_TOL_M = 10, 30  # outline simplification: official zones / terrain and notes
 SINCE_YEAR = 1995

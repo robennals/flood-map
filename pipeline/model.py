@@ -12,7 +12,8 @@
   still below the top of the dry bank. On a steep bank or seawall the edge's ground height is the river's
   surface, metres below the flood, so the published level is the one that counts there.
 - The creek part of those rules only counts real streams: never canals, ditches or pipelines, and in dry regions
-  only rivers that drain a large area or carry snowmelt (see the channel settings in config.py).
+  only rivers that drain a large area or carry snowmelt (see the channel settings in config.py). In basins with
+  no outlet, height is measured above the basin's floor (see without_filled_basins).
 - Land a levee protects (from FEMA or the Army Corps National Levee Database) is Elevated, or Higher if the
   Army Corps expects the levee to be overtopped more often than the 100-year standard (LEVEE_HIGHER_OVERTOPPING).
 - Properties LA County Public Works expects mud and debris flows from a recent burn area to reach: Higher if the
@@ -39,7 +40,7 @@ import rasterio
 from rasterio.enums import Resampling
 from rasterio.features import rasterize
 from rasterio.warp import reproject
-from scipy.ndimage import distance_transform_edt, label, maximum_filter, minimum_filter
+from scipy.ndimage import binary_opening, distance_transform_edt, find_objects, label, maximum_filter, minimum_filter
 
 from . import config, oregon
 
@@ -116,6 +117,29 @@ def ngvd29_to_navd88_m(shapes, grid_path):
     with rasterio.open(grid_path) as grid:
         points = gpd.GeoSeries(shapes.representative_point(), crs=shapes.crs).to_crs(grid.crs)
         return np.array([offset[0] for offset in grid.sample(zip(points.x, points.y))])
+
+
+def without_filled_basins(above_creek_m, ground_m, cell_m):
+    """Height above the nearest creek, corrected in closed basins, which the national data fills to the brim (see
+    FILLED_BASIN_* in config.py). Only ever raises heights, so only ever lowers risk."""
+    at_creek = (above_creek_m == 0) & ~np.isnan(ground_m)
+    width = max(round(config.FILLED_BASIN_WIDTH_M / cell_m), 1)
+    wide = binary_opening(at_creek, np.ones((width, width)), border_value=0)
+    patches, _ = label(at_creek)
+    wide_km2 = np.bincount(patches[wide], minlength=patches.max() + 1) * cell_m * cell_m / 1e6
+    boxes = find_objects(patches)
+    corrected = above_creek_m.copy()
+    reach = round(config.FILLED_BASIN_FLOOR_M / cell_m)
+    for patch in np.nonzero(wide_km2 >= config.FILLED_BASIN_MIN_KM2)[0]:
+        box = boxes[patch - 1]
+        inside = patches[box] == patch
+        ground = ground_m[box]
+        low, high = np.percentile(ground[inside & wide[box]], [2, 90])
+        if high - low <= config.FILLED_BASIN_MIN_RELIEF_M:
+            continue
+        floor = minimum_filter(np.where(inside, ground, np.inf), size=2 * reach + 1, mode="nearest")
+        corrected[box][inside] = (ground - floor)[inside]
+    return corrected
 
 
 def usable_flood_levels(shapes, field, to_navd88_m):
@@ -376,7 +400,7 @@ def run(region, fips, county_name):
     studied_zone = np.logical_or.reduce([burn(source_layers[name].geometry) for name in STUDIED_LAYERS])
     level, elevated_score, moderate_score = classify(
         ground_m, studied_zone, burn(source_layers["levee"].geometry),
-        _height_above_creek(region, shape, transform), transform.a,
+        without_filled_basins(_height_above_creek(region, shape, transform), ground_m, transform.a), transform.a,
         levee_often_overtopped=burn(source_layers["levee_often_overtopped"].geometry),
         creek_ignored=_channel_ignored(region, shape, transform),
         published_flood_m=_published_flood_levels(raw, studied_zone, transform, other_lines))

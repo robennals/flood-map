@@ -369,3 +369,25 @@ def test_a_failed_elevation_download_leaves_nothing_to_reuse(tmp_path, monkeypat
     with pytest.raises(subprocess.CalledProcessError):
         model._ground_elevation("oregon", "41019", box(0, 0, 100, 100))
     assert not (tmp_path / "counties" / "41019" / "elevation30.tif").exists()
+
+
+def test_hills_inside_a_filled_in_closed_basin_are_not_at_creek_level():
+    from pipeline.model import without_filled_basins
+
+    ground_m = np.full((100, 300), 100.0, dtype=np.float32)
+    ground_m[:, 100:200] = 100 + np.arange(100) * 0.5  # up from the basin's floor
+    ground_m[:, 200:] = 150.0
+    above_creek_m = np.full(ground_m.shape, 20.0, dtype=np.float32)
+    above_creek_m[:, :200] = 0.0  # the national data fills the basin to the brim
+    fixed = without_filled_basins(above_creek_m, ground_m, CELL_M)
+    assert (fixed[:, :99] < config.ELEV_CREEK_M).all()  # the floor, where water collects, is still low ground
+    assert (fixed[:, 115:200] >= config.MOD_CREEK_M).all()  # the hillside isn't
+    assert (fixed[:, 200:] == 20.0).all()
+
+
+def test_shallow_flats_at_creek_level_are_left_alone():
+    from pipeline.model import without_filled_basins
+
+    ground_m = np.tile(np.linspace(10, 15, 200, dtype=np.float32), (100, 1))  # like Portland's Columbia flats
+    above_creek_m = np.zeros(ground_m.shape, dtype=np.float32)
+    assert (without_filled_basins(above_creek_m, ground_m, CELL_M) == 0).all()
