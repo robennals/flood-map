@@ -450,3 +450,113 @@ def test_the_local_server_says_when_a_map_file_has_been_replaced(tmp_path):
     assert etag() != first
     server.shutdown()
     server.server_close()
+
+
+def test_fetching_a_county_asks_fema_for_its_flood_levels(tmp_path, monkeypatch):
+    import geopandas as gpd
+    from shapely.geometry import box
+    from pipeline import fetch
+
+    asked = {}
+
+    def download_layer(url, bbox, path, fields, where="1=1"):
+        asked[path.stem] = (fields, where)
+        return 0
+
+    monkeypatch.setattr(config, "RAW", tmp_path)
+    (tmp_path / "counties" / "41041").mkdir(parents=True)
+    monkeypatch.setattr(fetch, "fetch_county_outline",
+                        lambda fips: gpd.GeoDataFrame(geometry=[box(-124, 44, -123, 45)], crs=4326))
+    monkeypatch.setattr(fetch, "download_layer", download_layer)
+    monkeypatch.setattr(fetch, "download_file", lambda url, path: None)
+    monkeypatch.setattr(fetch, "get_json", lambda *args: {"NfipClaims": []})
+    fetch.fetch_county("41041")
+    for name, (_, field) in config.FEMA_LEVEL_LINES.items():
+        assert asked[name] == (f"{field},V_DATUM,LEN_UNIT", "1=1")
+    assert asked["fema_zone_levels"][1] == f"{config.FEMA_ZONE_LEVEL_FIELD} > -999"
+
+
+def test_an_oregon_county_fema_never_digitised_gets_its_paper_map(tmp_path, monkeypatch):
+    """From the state's database to the map layers, past floods and checks, on a made-up county."""
+    import json
+    import shutil
+    import zipfile
+
+    import geopandas as gpd
+    import pytest
+    import rasterio
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString, box
+    from pipeline import history, model, oregon, validate
+
+    if not shutil.which("gdal_contour"):
+        pytest.skip("needs GDAL's command-line tools")
+
+    fips = "41061"
+    west, south = gpd.GeoSeries.from_xy([-117.9], [45.3], crs=4326).to_crs(config.CRS).total_bounds[:2]
+    shape, transform = (80, 80), from_origin(west, south + 2400, CELL_M, CELL_M)
+    land = box(west, south, west + 2400, south + 2400)
+    paper = box(west, south, west + 600, south + 2400)  # the paper map's flood zone: the west quarter
+    ground_m = np.full(shape, 103.0, dtype=np.float32)
+    ground_m[:, :20] = 98.0  # river level at the foot of a bank
+
+    state = tmp_path / "state" / "Oregon_Statewide_Flood_Hazards.gdb"
+    state.parent.mkdir()
+
+    def write(layer, rows, shapes, **options):
+        gpd.GeoDataFrame(rows, geometry=shapes, crs=config.CRS).to_crs(2992).to_file(
+            state, layer=layer, driver="OpenFileGDB", **options)
+
+    write("FEMA_FLD_HAZ_AR", [{"FLD_ZONE": "A", "SOURCE": "FEMA FIRM - Union County 19800515"}], [paper])
+    write("FEMA_BFE", [{"ELEV": 102.5 / 0.3048, "V_DATUM": "NAVD88", "LEN_UNIT": "FEET"}] * 2,
+          [LineString([(west - 60, south + y), (west + 660, south + y)]) for y in (45, 2355)], mode="a")
+    write(config.OREGON_PAST_FLOOD["layer"], [{"WTR_NM": "Grande Ronde River"}], [paper], mode="a")
+
+    def download_file(url, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(path, "w") as zipped:
+            for part in state.rglob("*"):
+                zipped.write(part, part.relative_to(state.parent))
+
+    def download_layer(url, bbox, path, fields, where):
+        path.write_text('{"type": "FeatureCollection", "features": []}')
+        return 0
+
+    raw, work = tmp_path / "raw", tmp_path / "work"
+    monkeypatch.setattr(config, "RAW", raw)
+    monkeypatch.setattr(config, "WORK", work)
+    monkeypatch.setattr(config, "OREGON_DIR", raw / "oregon")
+    monkeypatch.setattr(config, "OREGON_GDB", raw / "oregon" / state.name)
+    monkeypatch.setattr(oregon, "download_layer", download_layer)
+    oregon.fetch(download_file)
+
+    county = config.county_raw(fips)
+    county.mkdir(parents=True)
+    for name in ("fema_zones", "nld_leveed_areas", "bam_6", "bam_8", "bam_14", "fema_zone_levels",
+                 *config.FEMA_LEVEL_LINES):
+        (county / f"{name}.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+    (county / "claims.json").write_text("[]")
+    (tmp_path / "bg").mkdir()
+    gpd.GeoDataFrame([{"GEOID10": "410619701001"}], geometry=[land], crs=config.CRS).to_file(
+        tmp_path / "bg" / f"tl_2010_{fips}_bg10.shp")
+    with zipfile.ZipFile(county / f"tl_2010_{fips}_bg10.zip", "w") as zipped:
+        for part in (tmp_path / "bg").iterdir():
+            zipped.write(part, part.name)
+
+    monkeypatch.setattr(model, "_land_outline", lambda fips: land)
+    monkeypatch.setattr(model, "_ground_elevation", lambda *args: (ground_m, transform))
+    monkeypatch.setattr(model, "_height_above_creek", lambda *args: np.full(shape, 50.0, dtype=np.float32))
+    monkeypatch.setattr(model, "_channel_ignored", lambda *args: np.zeros(shape, dtype=bool))
+    model.run("oregon", fips, "Union")
+
+    with rasterio.open(config.county_work(fips) / "level.tif") as src:
+        level = src.read(1) >> model.LEVEL_SHIFT
+    assert (level[:, :20] == HIGHER).all()  # inside the paper map's zone
+    assert level[40, 21] == ELEVATED  # half a metre above the level that map publishes, not 5 m above the river
+    assert '"paper_high"' in (config.county_work(fips) / "risk.geojsonseq").read_text()
+
+    out = tmp_path / "history.geojsonseq"
+    history.write_layers([fips], out)
+    flood = json.loads(out.read_text().splitlines()[0])["properties"]
+    assert flood == {"year": 1996, "source": "Army Corps of Engineers", "creek": "Grande Ronde River"}
+    assert validate.check_county(fips)["floods"]["1996"]["higher"] == 100

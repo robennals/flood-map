@@ -203,7 +203,8 @@ def _area_only(geometry):
 def _read_shapes(path):
     shapes = gpd.read_file(path)
     if len(shapes) == 0:
-        return gpd.GeoDataFrame({"FLD_ZONE": [], "ZONE_SUBTY": []}, geometry=[], crs=config.CRS)
+        return gpd.GeoDataFrame({name: gpd.pd.Series([], dtype=str) for name in ("FLD_ZONE", "ZONE_SUBTY")},
+                                geometry=[], crs=config.CRS)
     shapes = shapes[shapes.geometry.notna() & ~shapes.geometry.is_empty].to_crs(config.CRS)
     shapes["geometry"] = [_area_only(g) for g in shapes.geometry]
     return shapes[shapes.geometry.notna()]

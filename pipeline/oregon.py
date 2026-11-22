@@ -74,10 +74,12 @@ def upcoming_zones(bounds):
     """FEMA's preliminary and pending 1% zones within bounds."""
     from .model import is_flood_zone
 
-    found = []
+    found = [gpd.GeoDataFrame(geometry=[], crs=config.CRS)]
     for name in ("preliminary_zones", "pending_zones"):
-        zones = gpd.read_file(config.OREGON_DIR / f"{name}.geojson").to_crs(config.CRS).cx[
-            bounds[0]:bounds[2], bounds[1]:bounds[3]]
+        zones = gpd.read_file(config.OREGON_DIR / f"{name}.geojson").to_crs(config.CRS)
+        if not len(zones):  # none waiting to take effect, and an empty file has no columns
+            continue
+        zones = zones.cx[bounds[0]:bounds[2], bounds[1]:bounds[3]]
         found.append(_polygons_only(zones[is_flood_zone(zones.FLD_ZONE.fillna(""))]))
     return gpd.pd.concat(found)
 
