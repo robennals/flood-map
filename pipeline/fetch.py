@@ -12,7 +12,7 @@ import sys
 import geopandas as gpd
 import requests
 
-from . import config
+from . import config, oregon
 from .arcgis import download_by_ids, download_layer, get_json
 
 
@@ -200,6 +200,8 @@ def main(region):
     build_vrt(work / "elevation.vrt", [f"/vsicurl/{u}" for u in dem])
     log(f"elevation tiles: {len(dem)}")
     download_file(config.PRISM_ANNUAL_RAINFALL, config.RAW / "climate" / "prism_annual_rainfall.zip")
+    if any(oregon.is_oregon(fips) for fips in counties):
+        oregon.fetch(download_file)
     download_file(config.VERTCON_WEST, config.VERTCON_PATH)
     if config.VALLEY_WATER_COUNTY in counties:
         fetch_valley_water_floods()

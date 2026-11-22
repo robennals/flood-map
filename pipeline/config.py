@@ -37,8 +37,19 @@ COUNTY_GROUPS = {
         "06051": "Mono", "06049": "Modoc", "06091": "Sierra", "06003": "Alpine",
     },
 }
-# A region is one group, or "california" for all of them; the website shows one region.
-REGIONS = {**COUNTY_GROUPS, "california": {fips: name for group in COUNTY_GROUPS.values() for fips, name in group.items()}}
+OREGON_COUNTIES = {  # state 41 = Oregon
+    "41001": "Baker", "41003": "Benton", "41005": "Clackamas", "41007": "Clatsop", "41009": "Columbia",
+    "41011": "Coos", "41013": "Crook", "41015": "Curry", "41017": "Deschutes", "41019": "Douglas",
+    "41021": "Gilliam", "41023": "Grant", "41025": "Harney", "41027": "Hood River", "41029": "Jackson",
+    "41031": "Jefferson", "41033": "Josephine", "41035": "Klamath", "41037": "Lake", "41039": "Lane",
+    "41041": "Lincoln", "41043": "Linn", "41045": "Malheur", "41047": "Marion", "41049": "Morrow",
+    "41051": "Multnomah", "41053": "Polk", "41055": "Sherman", "41057": "Tillamook", "41059": "Umatilla",
+    "41061": "Union", "41063": "Wallowa", "41065": "Wasco", "41067": "Washington", "41069": "Wheeler",
+    "41071": "Yamhill",
+}
+# A region is one group, or a whole state; the website shows both states, each from its own files.
+REGIONS = {**COUNTY_GROUPS, "oregon": OREGON_COUNTIES,
+           "california": {fips: name for group in COUNTY_GROUPS.values() for fips, name in group.items()}}
 
 # Counties modelled at once by `make build` (each can use a few GB of memory)
 BUILD_WORKERS = int(os.environ.get("BUILD_WORKERS", 3))
@@ -46,7 +57,7 @@ BUILD_WORKERS = int(os.environ.get("BUILD_WORKERS", 3))
 # Layers the website draws, and the zoom each first appears at. Anything else the model writes stays out of the
 # map file: the zoomed-out tiles cover a lot of ground and have a size limit.
 MAP_LAYERS = {
-    "fema_high": 5, "prelim_high": 5, "dwr_awareness": 5, "levee_often_overtopped": 5, "levee": 5,
+    "fema_high": 5, "paper_high": 5, "prelim_high": 5, "dwr_awareness": 5, "levee_often_overtopped": 5, "levee": 5,
     "terrain_elevated": 5, "terrain_moderate": 7, "coverage": 5,
     # Individual properties: too small to see before zoom 9
     "mudflow_higher": 9, "mudflow_elevated": 9, "mudflow_moderate": 9,
@@ -56,7 +67,7 @@ MAP_LAYERS = {
 # Downloads stop before free disk space would fall below this
 MIN_FREE_DISK_GB = 15
 
-CRS = "EPSG:3310"  # California Albers, in metres
+CRS = "EPSG:3310"  # California Albers, in metres. Areas are exact, and distances within 1.2% as far as Oregon
 GRID_M = 30  # terrain grid
 COUNTY_MARGIN_DEG = 0.05  # download official zones about 5 km beyond each county line
 COUNTY_MARGIN_M = 3000  # and model terrain 3 km beyond it, so zones across the line still count
@@ -151,6 +162,30 @@ PRIMO_DEPTHS = PRIMO_DIR / "primo_flooddepth_table.csv"
 PRIMO_DEEP_M = 0.3  # deeper than this in the 1-in-20-year storm is Elevated
 PRIMO_SHALLOW_M = 0.1  # deeper than this in the 1-in-100-year storm is Moderate
 LA_PARCELS = "https://public.gis.lacounty.gov/public/rest/services/LACounty_Cache/LACounty_Parcel/MapServer/0"
+
+
+# Oregon (see oregon.py)
+OREGON_STATE_FIPS = "41"
+OREGON_BOUNDS = (-124.8, 41.8, -116.3, 46.4)
+OREGON_DIR = RAW / "oregon"
+OREGON_FLOOD_DATABASE = "https://ftp.gis.oregon.gov/framework/hazards/Oregon_Statewide_Flood_Hazards.zip"
+OREGON_GDB = OREGON_DIR / "Oregon_Statewide_Flood_Hazards.gdb"
+OREGON_PAST_FLOOD = {"layer": "NW_Oregon_1996_Inundation", "year": 1996, "source": "Army Corps of Engineers"}
+PAPER_MAP_SOURCE = "FEMA FIRM"  # the database's copies of newer, digital maps say "FEMA DFIRM"
+NOT_MAPPED_LABELS = ("D", "AREA NOT INCLUDED", "ANI")
+DIGITAL_MAP_SEAM_M = 5
+_PRELIMINARY = "https://hazards.fema.gov/arcgis/rest/services/PrelimPending/Prelim_NFHL/MapServer"
+_PENDING = "https://hazards.fema.gov/arcgis/rest/services/PrelimPending/Pending_NFHL/MapServer"
+OREGON_UPCOMING = {  # name -> (layer, fields)
+    "preliminary_zones": (f"{_PRELIMINARY}/21", "FLD_ZONE,DFIRM_ID"),
+    "preliminary_cross_sections": (f"{_PRELIMINARY}/14", "WSEL_REG,V_DATUM,LEN_UNIT"),
+    "preliminary_level_lines": (f"{_PRELIMINARY}/16", "ELEV,V_DATUM,LEN_UNIT"),
+    "pending_zones": (f"{_PENDING}/34", "FLD_ZONE,DFIRM_ID"),
+    "pending_cross_sections": (f"{_PENDING}/14", "WSEL_REG,V_DATUM,LEN_UNIT"),
+    "pending_level_lines": (f"{_PENDING}/16", "ELEV,V_DATUM,LEN_UNIT"),
+}
+OREGON_UPCOMING_LEVELS = {"preliminary_cross_sections": "WSEL_REG", "preliminary_level_lines": "ELEV",
+                          "pending_cross_sections": "WSEL_REG", "pending_level_lines": "ELEV"}
 
 
 def county_raw(fips):

@@ -313,3 +313,39 @@ def test_older_datum_levels_are_converted_with_noaas_grid(tmp_path):
                            LineString([(-122.6, 45.4), (-122.4, 45.6)])],  # and in its east cell
                           crs=4326).to_crs(config.CRS)
     assert np.allclose(ngvd29_to_navd88_m(lines, grid_path), [1.1, 0.8])
+
+
+def test_units_count_however_they_are_capitalised():
+    import geopandas as gpd
+    from shapely.geometry import LineString
+    from pipeline.model import usable_flood_levels
+
+    lines = gpd.GeoDataFrame([dict(ELEV=100.0, V_DATUM="NAVD88", LEN_UNIT="FEET")],  # as Oregon's database has it
+                             geometry=[LineString([(0, 0), (0, 1)])])
+    assert [round(m, 2) for _, m in usable_flood_levels(lines, "ELEV", np.zeros(1))] == [30.48]
+
+
+def test_paper_maps_only_fill_in_where_fema_has_no_digital_map():
+    import geopandas as gpd
+    from shapely.geometry import box
+    from pipeline.oregon import paper_zones_without_digital_map
+
+    paper = gpd.GeoDataFrame(
+        {"FLD_ZONE": ["A", "A4", "X", "AE"],
+         "SOURCE": ["FEMA FIRM - Grant County 19820518"] * 3 + ["FEMA DFIRM - Jackson County 20110503"]},
+        geometry=[box(0, 0, 4000, 100), box(0, 1000, 4000, 1100), box(0, 2000, 4000, 2100), box(0, 3000, 4000, 3100)],
+        crs=config.CRS)
+    digital = gpd.GeoDataFrame(
+        {"FLD_ZONE": ["X", "AE", "D"]},
+        # two zones with a 4 m seam between them (the server simplifies shapes), and an "undetermined" one
+        geometry=[box(0, -50, 1000, 1200), box(1004, -50, 2000, 1200), box(3000, -50, 4000, 1200)],
+        crs=config.CRS)
+    filled = paper_zones_without_digital_map(paper, digital)
+    assert set(filled.FLD_ZONE) == {"A", "A4"}  # only flood zones, and only those from paper maps
+    for (minx, _, maxx, _) in filled.geometry.bounds.itertuples(index=False):
+        assert abs(minx - 2000) < 6 and abs(maxx - 4000) < 6  # not over the digital map, or in its seams
+
+
+def test_every_oregon_county_is_in_the_oregon_region():
+    assert list(config.REGIONS["oregon"]) == [f"41{n:03d}" for n in range(1, 72, 2)]
+    assert not any(fips.startswith("41") for fips in config.REGIONS["california"])

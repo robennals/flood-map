@@ -8,7 +8,7 @@ import json
 
 import geopandas as gpd
 
-from . import config
+from . import config, oregon
 
 
 def write_layers(counties, out_path):
@@ -24,8 +24,18 @@ def write_layers(counties, out_path):
                 year = int(outline.FLOOD_YEAR.dropna().iloc[0])
             for part in outline.geometry.explode(index_parts=False):
                 out.write(json.dumps({"type": "Feature", "tippecanoe": {"layer": "past_floods"},
-                                      "properties": {"creek": creek, "year": year},
+                                      "properties": {"creek": creek, "year": year,
+                                                     "source": "Santa Clara Valley Water District"},
                                       "geometry": part.__geo_interface__}) + "\n")
+
+        if any(oregon.is_oregon(fips) for fips in counties):
+            flood = oregon.past_flood()
+            for river, part in zip(flood.WTR_NM, flood.geometry.simplify(config.SHARP_TOL_M).to_crs(4326)):
+                properties = {"year": config.OREGON_PAST_FLOOD["year"], "source": config.OREGON_PAST_FLOOD["source"]}
+                if river:
+                    properties["creek"] = river
+                out.write(json.dumps({"type": "Feature", "tippecanoe": {"layer": "past_floods"},
+                                      "properties": properties, "geometry": part.__geo_interface__}) + "\n")
 
         for fips in counties:
             raw = config.county_raw(fips)
