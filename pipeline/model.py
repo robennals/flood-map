@@ -3,10 +3,13 @@
 - Higher: FEMA's studied 1% (100-year) flood zones, current and preliminary, plus DWR "awareness"
   floodplains for streams FEMA never studied.
 - For every other spot, an "effective height" above the nearest large flood zone:
-  (ground height - ground height at that zone's nearest edge, floored at 0)
+  (ground height - flood level at that zone's nearest edge, floored at 0)
   + 1 m for every DIST_PENALTY_M metres of distance.
   Elevated if that is under ELEV_ZONE_M, or the spot is under ELEV_CREEK_M above the nearest creek.
   Moderate if under MOD_ZONE_M, or under MOD_CREEK_M above the nearest creek.
+  The flood level is the ground height at the edge, or FEMA's published 100-year level if that is higher but
+  still below the top of the dry bank. On a steep bank or seawall the edge's ground height is the river's
+  surface, metres below the flood, so the published level is the one that counts there.
 - The creek part of those rules only counts real streams: never canals, ditches or pipelines, and in dry regions
   only rivers that drain a large area or carry snowmelt (see the channel settings in config.py).
 - Land a levee protects (from FEMA or the Army Corps National Levee Database) is Elevated, or Higher if the
@@ -35,17 +38,20 @@ import rasterio
 from rasterio.enums import Resampling
 from rasterio.features import rasterize
 from rasterio.warp import reproject
-from scipy.ndimage import distance_transform_edt, label
+from scipy.ndimage import distance_transform_edt, label, maximum_filter, minimum_filter
 
 from . import config
 
 HIGHER, ELEVATED, MODERATE, LOWER = 4, 3, 2, 1
 LEVEL_SHIFT = 12  # level.tif stores level << 12
+LENGTH_UNITS_M = {"Feet": 0.3048, "Meters": 1.0}
+NO_LEVEL = -999  # FEMA writes -9999 and similar where there is no value
 LOOSE_LAYERS = {"terrain_elevated", "terrain_moderate", "undetermined", "note_fema_500", "coverage"}
 GDAL_REMOTE_ENV = {"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR", "GDAL_HTTP_MAX_RETRY": "5", "GDAL_HTTP_RETRY_DELAY": "5"}
 
 
-def classify(ground_m, studied_zone, levee, above_creek_m, cell_m, levee_often_overtopped=None, creek_ignored=None):
+def classify(ground_m, studied_zone, levee, above_creek_m, cell_m, levee_often_overtopped=None, creek_ignored=None,
+             published_flood_m=None):
     """The model's rules on a grid. All arrays share one shape; `cell_m` is the grid spacing.
 
     ground_m: ground elevation (NaN where unknown)
@@ -53,6 +59,7 @@ def classify(ground_m, studied_zone, levee, above_creek_m, cell_m, levee_often_o
     levee: True on levee-protected land
     above_creek_m: height above the nearest creek (NaN where unknown)
     levee_often_overtopped: True behind levees overtopped at least LEVEE_HIGHER_OVERTOPPING of years
+    published_flood_m: FEMA's 100-year flood level inside studied zones (NaN where none is published)
     creek_ignored: True where the nearest channel doesn't count (a canal, or a small dry wash in a dry region)
 
     Returns (level, elevated_score, moderate_score). A score under 1 means the spot qualifies for
@@ -64,11 +71,15 @@ def classify(ground_m, studied_zone, levee, above_creek_m, cell_m, levee_often_o
     patch_ha = np.bincount(patches.ravel()) * cell_m * cell_m / 1e4
     spreading_zone = studied_zone & (patch_ha[patches] >= config.MIN_SOURCE_HA)
 
-    # Effective height above the nearest spreading zone: height above its nearest edge (floored at 0,
-    # since ground lower than a flood zone's edge is no safer), plus a penalty for distance.
+    # Effective height above the nearest spreading zone: height above the flood level at its nearest edge (floored
+    # at 0, since ground lower than that is no safer), plus a penalty for distance.
     if spreading_zone.any():
         distance_cells, (nearest_y, nearest_x) = distance_transform_edt(~spreading_zone, return_indices=True)
-        above_zone_m = (np.maximum(ground_m - ground_m[nearest_y, nearest_x], 0)
+        flood_m = ground_m
+        if published_flood_m is not None:
+            believed = published_flood_m <= _bank_top(ground_m, spreading_zone, cell_m) + config.BANK_TOLERANCE_M
+            flood_m = np.where(believed, np.fmax(ground_m, published_flood_m), ground_m)
+        above_zone_m = (np.maximum(ground_m - flood_m[nearest_y, nearest_x], 0)
                         + distance_cells * cell_m / config.DIST_PENALTY_M)
     else:
         above_zone_m = np.full(ground_m.shape, np.inf, dtype=np.float32)
@@ -87,6 +98,50 @@ def classify(ground_m, studied_zone, levee, above_creek_m, cell_m, levee_often_o
     if levee_often_overtopped is not None:
         level[levee_often_overtopped] = HIGHER
     return level, elevated_score, moderate_score
+
+
+def _bank_top(ground_m, zone, cell_m):
+    """The highest dry ground near each cell: a flood level above it contradicts the zone's own outline."""
+    dry_ground_m = np.where(zone | np.isnan(ground_m), -np.inf, ground_m)
+    return maximum_filter(dry_ground_m, size=2 * round(config.BANK_SEARCH_M / cell_m) + 1, mode="nearest")
+
+
+def usable_flood_levels(shapes, field):
+    """(shape, level in metres) for shapes with a usable level. Only levels above NAVD88, the datum of the ground
+    heights: the older NGVD29 differs from it by up to about a metre on the West Coast."""
+    usable = []
+    for shape, value, datum, unit in zip(shapes.geometry, shapes[field], shapes.V_DATUM, shapes.LEN_UNIT):
+        metres = LENGTH_UNITS_M.get(unit)
+        if shape is not None and datum == "NAVD88" and metres and value is not None and value > NO_LEVEL:
+            usable.append((shape, value * metres))
+    return usable
+
+
+def levels_between_lines(line_at, levels, zone):
+    """The flood level each zone cell is sure to reach, from the lines levels are published on.
+
+    The lines cut a zone into stretches. Water falls downstream, so a stretch between lines floods at least as high
+    as the lowest of them. A stretch with only one line gets no level: downstream of that line the flood is lower,
+    by an unknown amount. Taking the lowest also drops levels mistyped too high.
+
+    line_at: which line crosses each cell: its position in `levels` plus one, or 0 for none
+    """
+    line_at = np.where(zone, line_at, 0)
+    stretch, count = label(zone & (line_at == 0))  # cells joined by their sides, which lines can't leak through
+    first, last = np.full(count + 1, np.iinfo(np.int32).max), np.zeros(count + 1, dtype=np.int32)
+    lowest = np.full(count + 1, np.inf)
+    here, there = slice(None, -1), slice(1, None)
+    for a, b in (((here, ...), (there, ...)), ((there, ...), (here, ...)),
+                 ((..., here), (..., there)), ((..., there), (..., here))):
+        touching = (stretch[a] > 0) & (line_at[b] > 0)
+        stretches, lines = stretch[a][touching], line_at[b][touching]
+        np.minimum.at(first, stretches, lines)
+        np.maximum.at(last, stretches, lines)
+        np.minimum.at(lowest, stretches, np.asarray(levels, dtype=float)[lines - 1])
+    lowest[first >= last] = np.inf  # fewer than two lines
+    level = lowest[stretch]
+    level = np.where(line_at > 0, minimum_filter(level, size=3, mode="nearest"), level)
+    return np.where(zone & np.isfinite(level), level, np.nan)
 
 
 def _area_only(geometry):
@@ -221,6 +276,27 @@ def _height_above_creek(region, shape, transform):
     return above_creek_m
 
 
+def _published_flood_levels(raw, studied_zone, transform):
+    """FEMA's 100-year flood level across the studied zones: a zone's own level where it has one (the coast,
+    lakes), otherwise from the lines levels are published on along rivers."""
+    def read_levels(name, field):
+        shapes = gpd.read_file(raw / f"{name}.geojson")
+        # a county with no detailed study has none
+        return usable_flood_levels(shapes.to_crs(config.CRS), field) if len(shapes) else []
+
+    level_m = np.full(studied_zone.shape, np.nan)
+    lines = [line for name, (_, field) in config.FEMA_LEVEL_LINES.items() for line in read_levels(name, field)]
+    if lines:
+        line_at = rasterize(((line, number) for number, (line, _) in enumerate(lines, start=1)),
+                            out_shape=studied_zone.shape, transform=transform, dtype="int32", all_touched=True)
+        level_m = levels_between_lines(line_at, [level for _, level in lines], studied_zone)
+    zones = read_levels("fema_zone_levels", config.FEMA_ZONE_LEVEL_FIELD)
+    if zones:
+        own_level_m = rasterize(zones, out_shape=studied_zone.shape, transform=transform, fill=np.nan, dtype="float32")
+        level_m = np.where(studied_zone & ~np.isnan(own_level_m), own_level_m, level_m)
+    return level_m
+
+
 def run(region, fips, county_name):
     raw, work = config.county_raw(fips), config.county_work(fips)
     work.mkdir(parents=True, exist_ok=True)
@@ -263,7 +339,8 @@ def run(region, fips, county_name):
         ground_m, studied_zone, burn(source_layers["levee"].geometry),
         _height_above_creek(region, shape, transform), transform.a,
         levee_often_overtopped=burn(source_layers["levee_often_overtopped"].geometry),
-        creek_ignored=_channel_ignored(region, shape, transform))
+        creek_ignored=_channel_ignored(region, shape, transform),
+        published_flood_m=_published_flood_levels(raw, studied_zone, transform))
     for name, value in PROPERTY_LEVELS.items():
         if name in source_layers:  # properties are smaller than a grid cell, so count every cell they touch
             level = np.where(burn(source_layers[name].geometry, all_touched=True), np.maximum(level, value), level)

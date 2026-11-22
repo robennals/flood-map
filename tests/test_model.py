@@ -147,3 +147,139 @@ def test_primo_parcels_get_a_level_by_depth_and_storm():
     for name, shapes in layers.items():
         assert (shapes.expected == name).all(), name
     assert sum(len(shapes) for shapes in layers.values()) == len(listed)  # the dry parcel is left out
+
+
+def test_steep_bank_is_judged_against_the_published_flood_level():
+    ground_m, zone, levee, above_creek_m = grid()
+    ground_m[:, :30] = 3.0  # the river's surface, which is what the zone's edge cells hold at a seawall
+    ground_m[:, 30:] = 10.5
+    ground_m[:, 60:] = 20.0  # a bluff further back
+    published = np.where(zone, 10.0, np.nan)  # FEMA's 100-year flood level
+    level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, published_flood_m=published)
+    assert level[20, 31] == ELEVATED  # half a metre above the flood, though 7.5 m above the river
+    assert level[20, 45] == MODERATE  # 480 m back adds 1.2 m
+    assert level[20, 61] == LOWER
+
+
+def test_published_flood_level_never_makes_ground_safer():
+    ground_m, zone, levee, above_creek_m = grid()
+    ground_m[:, 30:] = 10.5
+    published = np.where(zone, 4.0, np.nan)  # below the ground at the zone's edge
+    level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, published_flood_m=published)
+    assert (level == classify(ground_m, zone, levee, above_creek_m, CELL_M)[0]).all()
+
+
+def test_a_published_level_above_the_dry_bank_is_not_believed():
+    ground_m, zone, levee, above_creek_m = grid()
+    ground_m[:, :30] = 3.0
+    ground_m[:, 30:] = 10.5
+    published = np.where(zone, 15.0, np.nan)  # a level from upstream: this would have flooded the bank FEMA shows dry
+    level, _, _ = classify(ground_m, zone, levee, above_creek_m, CELL_M, published_flood_m=published)
+    assert (level == classify(ground_m, zone, levee, above_creek_m, CELL_M)[0]).all()
+
+
+def river_with_lines(*levels):
+    """A river 60 cells long with a flood level line across it at columns 10, 30 and so on, and a second river
+    a short way off over dry ground with no lines."""
+    zone = np.zeros((20, 60), dtype=bool)
+    zone[2:5, :] = True
+    zone[8:11, :] = True
+    line_at = np.zeros(zone.shape, dtype=np.int32)  # 0 for none, else the line's position in `levels` plus one
+    for number, _ in enumerate(levels, start=1):
+        line_at[1:6, 10 + 20 * (number - 1)] = number
+    return line_at, np.array(levels), zone
+
+
+def test_between_two_lines_the_flood_is_at_least_the_downstream_level():
+    from pipeline.model import levels_between_lines
+
+    levels = levels_between_lines(*river_with_lines(10.0, 14.0))
+    assert (levels[2:5, 10:31] == 10.0).all()  # never the upstream level, which would be too high further down
+
+
+def test_lines_with_the_same_level_still_bound_a_stretch():
+    from pipeline.model import levels_between_lines
+
+    assert (levels_between_lines(*river_with_lines(10.0, 10.0))[2:5, 11:30] == 10.0).all()
+
+
+def test_flood_levels_stop_at_the_last_line_and_stay_in_their_own_river():
+    from pipeline.model import levels_between_lines
+
+    levels = levels_between_lines(*river_with_lines(10.0, 14.0))
+    assert np.isnan(levels[2:5, :10]).all()
+    assert np.isnan(levels[2:5, 31:]).all()
+    assert np.isnan(levels[8:11]).all()
+    assert np.isnan(levels[1]).all()  # where a line pokes out of the zone
+
+
+def test_a_mistyped_level_is_outvoted_by_its_neighbours():
+    from pipeline.model import levels_between_lines
+
+    levels = levels_between_lines(*river_with_lines(10.0, 977.0, 14.0))
+    assert np.nanmax(levels) == 14.0
+
+
+def test_flood_level_lines_are_metres_above_the_same_datum_as_the_ground():
+    import geopandas as gpd
+    from shapely.geometry import LineString
+    from pipeline.model import usable_flood_levels
+
+    rows = [  # level, datum, unit
+        (100.0, "NAVD88", "Feet"),
+        (12.0, "NAVD88", "Meters"),
+        (100.0, "NGVD29", "Feet"),  # an older datum, about a metre different in Oregon
+        (-9999.0, "NAVD88", "Feet"),  # FEMA's "no value"
+        (100.0, "NAVD88", "NP"),
+        (None, "NAVD88", "Feet"),
+    ]
+    lines = gpd.GeoDataFrame([dict(ELEV=e, V_DATUM=d, LEN_UNIT=u) for e, d, u in rows],
+                             geometry=[LineString([(i, 0), (i, 1)]) for i in range(len(rows))])
+    assert [round(m, 2) for _, m in usable_flood_levels(lines, "ELEV")] == [30.48, 12.0]
+
+
+def test_published_levels_are_read_from_the_downloaded_lines(tmp_path):
+    import geopandas as gpd
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString
+    from pipeline.model import _published_flood_levels
+
+    zone = np.zeros((20, 60), dtype=bool)
+    zone[5:10, :] = True
+    transform = from_origin(0, 600, CELL_M, CELL_M)
+    (sections, (_, section_field)), (others, _) = config.FEMA_LEVEL_LINES.items()
+    (tmp_path / f"{others}.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+    (tmp_path / "fema_zone_levels.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+
+    def write_sections(*rows):
+        gpd.GeoDataFrame([{section_field: feet, "V_DATUM": "NAVD88", "LEN_UNIT": "Feet"} for _, feet in rows],
+                         geometry=[LineString([(x, 240), (x, 480)]) for x, _ in rows],
+                         crs=config.CRS).to_crs(4326).to_file(tmp_path / f"{sections}.geojson", driver="GeoJSON")
+
+    write_sections((315, 100.0), (915, 110.0))
+    assert np.isclose(_published_flood_levels(tmp_path, zone, transform)[7, 20], 30.48)
+    (tmp_path / f"{sections}.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+    assert np.isnan(_published_flood_levels(tmp_path, zone, transform)).all()  # a county with no detailed study
+
+
+def test_a_zone_with_a_level_of_its_own_uses_it(tmp_path):
+    import geopandas as gpd
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString, box
+    from pipeline.model import _published_flood_levels
+
+    zone = np.zeros((20, 60), dtype=bool)
+    zone[5:10, :] = True
+    transform = from_origin(0, 600, CELL_M, CELL_M)
+    (sections, (_, section_field)), (others, _) = config.FEMA_LEVEL_LINES.items()
+    (tmp_path / f"{others}.geojson").write_text('{"type": "FeatureCollection", "features": []}')
+    gpd.GeoDataFrame([{section_field: 10.0, "V_DATUM": "NAVD88", "LEN_UNIT": "Feet"}] * 2,
+                     geometry=[LineString([(x, 240), (x, 480)]) for x in (315, 1515)],
+                     crs=config.CRS).to_crs(4326).to_file(tmp_path / f"{sections}.geojson", driver="GeoJSON")
+    # Part of the zone is a wave zone on the coast, which FEMA gives one level
+    gpd.GeoDataFrame([{"STATIC_BFE": 30.0, "V_DATUM": "NAVD88", "LEN_UNIT": "Feet"}],
+                     geometry=[box(450, 300, 900, 450)],
+                     crs=config.CRS).to_crs(4326).to_file(tmp_path / "fema_zone_levels.geojson", driver="GeoJSON")
+    levels = _published_flood_levels(tmp_path, zone, transform)
+    assert np.isclose(levels[7, 20], 9.144)  # its own level, not the lower one from the lines either side
+    assert np.isclose(levels[7, 40], 3.048)

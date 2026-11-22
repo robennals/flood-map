@@ -82,8 +82,12 @@ actually flooded in the events below was inside them.</p>
 <p>Flood water spreads onto nearby land that is not much higher than the flood itself. So for every spot outside a
 flood zone, we find the nearest large flood zone and compare ground heights:</p>
 <ul>
-  <li><b>Height above the flood level:</b> the spot's ground height minus the ground height at the nearest edge of
-  the flood zone (used as a stand-in for the flood water's level). Spots lower than that edge count as level with it.</li>
+  <li><b>Height above the flood level:</b> the spot's ground height minus the flood level at the nearest edge of
+  the zone (or 0 if the spot is lower: ground below the flood level is no safer). The edge of a zone is where the
+  flood just reaches, so its ground height usually is the flood level. On steep banks and seawalls the edge is
+  almost at the river's surface instead, so where FEMA has published a 100-year flood level we use that if it's
+  higher. On the coast and around lakes that's the level of the zone itself. Along rivers it's the lower of the
+  two nearest published levels either side. We ignore any level that would top the bank FEMA shows as dry.</li>
   <li><b>Distance:</b> we add 1 m of height for every 400 m of distance from the zone. On flat ground this makes the
   risk fade gradually with distance instead of stopping at a line.</li>
   <li><b>Small zones don't spread risk:</b> only flood zones of at least 5 hectares (about 220 m × 220 m) are used
@@ -229,6 +233,8 @@ claims of those without. Where the fit is weaker:</p>
 <h2>Data sources</h2>
 <table>
   <tr><th>Data</th><th>From</th><th>Used for</th></tr>
+  <tr><td>100-year flood levels (National Flood Hazard Layer)</td><td><a href="https://www.fema.gov/flood-maps/national-flood-hazard-layer">FEMA</a></td>
+      <td>Flood level at the edge of each zone</td></tr>
   <tr><td>Flood hazard zones (National Flood Hazard Layer)</td><td><a href="https://www.fema.gov/flood-maps/national-flood-hazard-layer">FEMA</a></td>
       <td>Studied creek flood zones (Higher), levee areas (Elevated); 500-year and undetermined labels as notes</td></tr>
   <tr><td>National Levee Database: land each levee protects, and how often it is expected to be overtopped</td><td><a href="https://levees.sec.usace.army.mil/">US Army Corps of Engineers</a></td>

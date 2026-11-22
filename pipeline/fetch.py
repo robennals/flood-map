@@ -73,13 +73,16 @@ def fetch_county(fips):
 
     layers = {"fema_zones": (config.FEMA_ZONES, "FLD_ZONE,ZONE_SUBTY,DFIRM_ID")}
     layers.update({name: (f"{config.DWR_BAM}/{num}", "*") for name, num in config.DWR_LAYERS.items()})
+    layers.update({name: (url, f"{field},V_DATUM,LEN_UNIT") for name, (url, field) in config.FEMA_LEVEL_LINES.items()})
+    layers["fema_zone_levels"] = (config.FEMA_ZONES, f"{config.FEMA_ZONE_LEVEL_FIELD},V_DATUM,LEN_UNIT")
     layers["nld_leveed_areas"] = (config.NLD_LEVEED_AREAS, "SYSTEM_NAME,OVERTOPPING_ACE,FEMA_ACCREDITATION_RATING")
     if fips == config.LA_COUNTY:
         layers["mudflow_properties"] = (config.LA_MUDFLOW_PROPERTIES, "FIRE,FIRE_YEAR,PHASE1,PHASE2,PHASE3")
+    only = {"fema_zone_levels": f"{config.FEMA_ZONE_LEVEL_FIELD} > -999"}  # most zones have no level of their own
     for name, (url, fields) in layers.items():
         path = raw / f"{name}.geojson"
         if not path.exists():
-            log(f"  {fips} {name}: {download_layer(url, bbox, path, fields)} shapes")
+            log(f"  {fips} {name}: {download_layer(url, bbox, path, fields, only.get(name, '1=1'))} shapes")
 
     claims_path = raw / "claims.json"
     if not claims_path.exists():

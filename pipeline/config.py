@@ -65,6 +65,10 @@ COUNTY_MARGIN_M = 3000  # and model terrain 3 km beyond it, so zones across the 
 DIST_PENALTY_M = 400  # 1 m of effective height per this many metres from a flood zone
 ELEV_ZONE_M, ELEV_CREEK_M = 1.0, 1.5  # Elevated: within this height of a zone's level / above a creek
 MOD_ZONE_M, MOD_CREEK_M = 3.0, 4.0  # Moderate: same, looser
+# A published flood level is only believed below the top of the dry bank: the highest ground outside the zone
+# within BANK_SEARCH_M of its edge, give or take BANK_TOLERANCE_M for the elevation data
+BANK_SEARCH_M = 90
+BANK_TOLERANCE_M = 0.5
 MIN_SOURCE_HA = 5  # only flood zones at least this big spread risk to nearby ground
 SHARP_TOL_M, LOOSE_TOL_M = 10, 30  # outline simplification: official zones / terrain and notes
 SINCE_YEAR = 1995
@@ -83,6 +87,13 @@ ARTIFICIAL_CHANNEL_TYPES = {"CanalDitch", "Pipeline"}  # flood insurance claims 
 
 # Data sources
 FEMA_ZONES = "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28"
+# FEMA's 100-year flood levels, drawn as lines across its zones: name -> (layer, the field holding the level)
+FEMA_LEVEL_LINES = {
+    "fema_cross_sections": ("https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/14", "WSEL_REG"),
+    "fema_level_lines": ("https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/16", "ELEV"),
+}
+# Zones FEMA gives one level each (the coast, lakes, ponding), in this field
+FEMA_ZONE_LEVEL_FIELD = "STATIC_BFE"
 DWR_BAM = "https://arcgis04.geiconsultants.com/arcgis/rest/services/BAM/BAM2025/MapServer"
 DWR_LAYERS = {"bam_6": 6, "bam_8": 8, "bam_14": 14}  # FEMA preliminary 1%, DWR awareness, FEMA preliminary 0.2%
 # Army Corps National Levee Database: the land each levee protects, with its yearly overtopping chance
