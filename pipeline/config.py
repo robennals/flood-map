@@ -64,6 +64,11 @@ MAP_LAYERS = {
     "primo_elevated": 9, "primo_moderate": 9,
 }
 
+# Zoomed-out tiles, so both states show at once (about zoom 4.5 on most screens, under 4 on a phone held sideways).
+# They hold the layers that show from MAP_MIN_ZOOM, and are made separately and joined on.
+OVERVIEW_MIN_ZOOM = 3
+MAP_MIN_ZOOM = 5
+
 # Downloads stop before free disk space would fall below this
 MIN_FREE_DISK_GB = 15
 

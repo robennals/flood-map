@@ -9,7 +9,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
 
 from . import config
 from . import history, model
@@ -19,9 +21,30 @@ def tippecanoe(src, dest):
     tmp = os.environ.get("TMPDIR", "/tmp")
     # Zoomed-out tiles cover a lot of ground, so shapes there are simplified harder to stay under the tile size
     # limit (detailed desert terrain overflowed it); street-level zooms keep full detail.
-    subprocess.run(["tippecanoe", "-q", "-t", tmp, "-o", str(dest), "-Z5", "-z12", "--force",
+    subprocess.run(["tippecanoe", "-q", "-t", tmp, "-o", str(dest), f"-Z{config.MAP_MIN_ZOOM}", "-z12", "--force",
                     "--coalesce-densest-as-needed", "--extend-zooms-if-still-dropping",
                     "--simplification=10", "--simplify-only-low-zooms", str(src)], check=True)
+
+
+def add_overview(shapes, tiles):
+    """Join zoomed-out tiles of `shapes` (what `tiles` was made from) onto `tiles`, whose own zooms are untouched."""
+    tmp = os.environ.get("TMPDIR", "/tmp")
+    with tempfile.TemporaryDirectory(dir=tmp) as work:
+        selected, overview = Path(work) / "overview.geojsonseq", Path(work) / "overview.pmtiles"
+        with open(shapes) as src, open(selected, "w") as dst:
+            for line in src:
+                feature = json.loads(line)
+                if config.MAP_LAYERS.get(feature["tippecanoe"]["layer"]) == config.MAP_MIN_ZOOM:
+                    feature["tippecanoe"].pop("minzoom", None)
+                    dst.write(json.dumps(feature) + "\n")
+        subprocess.run(["tippecanoe", "-q", "-t", tmp, "-o", str(overview), f"-Z{config.OVERVIEW_MIN_ZOOM}",
+                        f"-z{config.MAP_MIN_ZOOM - 1}", "--force", "--coalesce-densest-as-needed",
+                        "--simplification=10", str(selected)], check=True)
+        joined = Path(work) / "joined.pmtiles"
+        # No size limit: it would silently drop any big tile from the detailed zooms
+        subprocess.run(["tile-join", "-q", "--force", "--no-tile-size-limit", "-n", Path(tiles).stem,
+                        "-o", str(joined), str(tiles), str(overview)], check=True)
+        shutil.move(joined, tiles)
 
 
 def main(region, only=None, run_model=True):
@@ -67,6 +90,7 @@ def main(region, only=None, run_model=True):
                     feature["tippecanoe"]["minzoom"] = config.MAP_LAYERS[layer]
                     dst.write(json.dumps(feature) + "\n")
     tippecanoe(combined, out / "risk.pmtiles")
+    add_overview(combined, out / "risk.pmtiles")
 
     placed, total = history.write_layers(built, config.WORK / region / "history.geojsonseq")
     tippecanoe(config.WORK / region / "history.geojsonseq", out / "history.pmtiles")

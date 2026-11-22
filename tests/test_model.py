@@ -391,3 +391,62 @@ def test_shallow_flats_at_creek_level_are_left_alone():
     ground_m = np.tile(np.linspace(10, 15, 200, dtype=np.float32), (100, 1))  # like Portland's Columbia flats
     above_creek_m = np.zeros(ground_m.shape, dtype=np.float32)
     assert (without_filled_basins(above_creek_m, ground_m, CELL_M) == 0).all()
+
+
+def test_overview_tiles_add_zoomed_out_levels_without_changing_the_rest(tmp_path):
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+    from pipeline import build
+
+    if not shutil.which("tippecanoe"):
+        pytest.skip("needs tippecanoe")
+
+    def square(layer, west):
+        ring = [[west, 44], [west + 1, 44], [west + 1, 45], [west, 45], [west, 44]]
+        return json.dumps({"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [ring]},
+                           "tippecanoe": {"layer": layer, "minzoom": config.MAP_LAYERS[layer]}})
+
+    shapes, tiles = tmp_path / "risk.geojsonseq", tmp_path / "risk.pmtiles"
+    shapes.write_text("\n".join([square("fema_high", -123), square("terrain_moderate", -121)]) + "\n")
+    build.tippecanoe(shapes, tiles)
+
+    def decoded(*options):
+        out = subprocess.run(["tippecanoe-decode", "-c", *options, str(tiles)], capture_output=True, text=True, check=True)
+        return sorted(line for line in out.stdout.splitlines() if '"Feature"' in line and "FeatureCollection" not in line)
+
+    before = decoded("-Z5", "-z9")
+    build.add_overview(shapes, tiles)
+    assert decoded("-Z5", "-z9") == before
+    for zoom in range(config.OVERVIEW_MIN_ZOOM, 5):
+        assert decoded(f"-Z{zoom}", f"-z{zoom}", "-l", "fema_high")  # shows when zoomed right out
+        assert not decoded(f"-Z{zoom}", f"-z{zoom}", "-l", "terrain_moderate")  # still only from zoom 7
+
+
+def test_the_local_server_says_when_a_map_file_has_been_replaced(tmp_path):
+    import threading
+    from functools import partial
+    from http.server import ThreadingHTTPServer
+    from urllib.request import ProxyHandler, Request, build_opener
+
+    from pipeline.serve import RangeRequestHandler
+
+    tiles = tmp_path / "risk.pmtiles"
+    tiles.write_bytes(b"first version")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(RangeRequestHandler, directory=str(tmp_path)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def etag():
+        request = Request(f"http://127.0.0.1:{server.server_port}/risk.pmtiles", headers={"Range": "bytes=0-3"})
+        with build_opener(ProxyHandler({})).open(request, timeout=5) as response:
+            return response.headers["ETag"]
+
+    first = etag()
+    assert first and not first.startswith("W/")  # the map library ignores weak tags
+    assert etag() == first
+    tiles.write_bytes(b"a second, longer version")
+    assert etag() != first
+    server.shutdown()
+    server.server_close()

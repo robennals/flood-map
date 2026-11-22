@@ -36,8 +36,11 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
             return None
         f = open(path, "rb")
+        stat = os.fstat(f.fileno())
         f.seek(start)
         self.send_response(HTTPStatus.PARTIAL_CONTENT)
+        # Lets the map library notice a rebuilt file under an open tab, instead of reading it with the old file's index
+        self.send_header("ETag", f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"')
         self.send_header("Content-Type", self.guess_type(path))
         self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         self.send_header("Content-Length", str(end - start + 1))
