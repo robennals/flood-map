@@ -283,3 +283,14 @@ def test_a_zone_with_a_level_of_its_own_uses_it(tmp_path):
     levels = _published_flood_levels(tmp_path, zone, transform)
     assert np.isclose(levels[7, 20], 9.144)  # its own level, not the lower one from the lines either side
     assert np.isclose(levels[7, 40], 3.048)
+
+
+def test_only_flood_zone_labels_count_as_flood_zones():
+    import pandas as pd
+    from pipeline.model import is_flood_zone
+
+    expected = {"A": True, "AE": True, "AH": True, "AO": True, "AR": True, "AR/AE": True, "A4": True, "A22": True,
+                "V": True, "VE": True, "VO": True, "V12": True,
+                "AREA NOT INCLUDED": False, "ANI": False, "A99": False, "X": False, "D": False, "OPEN WATER": False,
+                "0.2 PCT ANNUAL CHANCE FLOOD HAZARD": False, "": False}
+    assert dict(zip(expected, is_flood_zone(pd.Series(list(expected))))) == expected

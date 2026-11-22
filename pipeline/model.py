@@ -44,6 +44,9 @@ from . import config
 
 HIGHER, ELEVATED, MODERATE, LOWER = 4, 3, 2, 1
 LEVEL_SHIFT = 12  # level.tif stores level << 12
+# FEMA's labels for a 1% flood zone (A99, behind a levee being built, counts as a levee instead). Matched whole:
+# "AREA NOT INCLUDED" and "ANI" also start with an A.
+FLOOD_ZONE_LABEL = r"A|AE|AH|AO|AR(?:/.+)?|A(?!99$)\d+|V|VE|VO|V\d+"
 LENGTH_UNITS_M = {"Feet": 0.3048, "Meters": 1.0}
 NO_LEVEL = -999  # FEMA writes -9999 and similar where there is no value
 LOOSE_LAYERS = {"terrain_elevated", "terrain_moderate", "undetermined", "note_fema_500", "coverage"}
@@ -142,6 +145,11 @@ def levels_between_lines(line_at, levels, zone):
     level = lowest[stretch]
     level = np.where(line_at > 0, minimum_filter(level, size=3, mode="nearest"), level)
     return np.where(zone & np.isfinite(level), level, np.nan)
+
+
+def is_flood_zone(zone):
+    """True for the labels (a pandas Series) that mean a studied 1% flood zone."""
+    return zone.str.fullmatch(FLOOD_ZONE_LABEL)
 
 
 def _area_only(geometry):
@@ -319,7 +327,7 @@ def run(region, fips, county_name):
     often = overtopping >= config.LEVEE_HIGHER_OVERTOPPING
     zone, subtype = fema.FLD_ZONE.fillna(""), fema.ZONE_SUBTY.fillna("")
     source_layers = {
-        "fema_high": fema[zone.str.startswith(("A", "V")) & (zone != "A99")],
+        "fema_high": fema[is_flood_zone(zone)],
         "prelim_high": _read_shapes(raw / "bam_6.geojson"),
         "dwr_awareness": _read_shapes(raw / "bam_8.geojson"),
         "levee_often_overtopped": leveed[often],
