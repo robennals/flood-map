@@ -349,3 +349,23 @@ def test_paper_maps_only_fill_in_where_fema_has_no_digital_map():
 def test_every_oregon_county_is_in_the_oregon_region():
     assert list(config.REGIONS["oregon"]) == [f"41{n:03d}" for n in range(1, 72, 2)]
     assert not any(fips.startswith("41") for fips in config.REGIONS["california"])
+
+
+def test_a_failed_elevation_download_leaves_nothing_to_reuse(tmp_path, monkeypatch):
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+    from shapely.geometry import box
+    from pipeline import model
+
+    def dropped_connection(command, **options):
+        Path(command[-1]).write_bytes(b"half a file")
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(config, "WORK", tmp_path)
+    monkeypatch.setattr(model.subprocess, "run", dropped_connection)
+    (tmp_path / "counties" / "41019").mkdir(parents=True)
+    with pytest.raises(subprocess.CalledProcessError):
+        model._ground_elevation("oregon", "41019", box(0, 0, 100, 100))
+    assert not (tmp_path / "counties" / "41019" / "elevation30.tif").exists()

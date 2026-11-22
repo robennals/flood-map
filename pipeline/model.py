@@ -244,11 +244,13 @@ def _ground_elevation(region, fips, land):
     if not path.exists():
         minx, miny, maxx, maxy = land.bounds
         margin = config.COUNTY_MARGIN_M
+        partial = path.with_name("elevation30.partial.tif")  # so a dropped connection can't leave half a file to reuse
         subprocess.run(["gdalwarp", "-q", "-overwrite", "-t_srs", config.CRS,
                         "-te", str(minx - margin), str(miny - margin), str(maxx + margin), str(maxy + margin),
                         "-tr", str(config.GRID_M), str(config.GRID_M), "-r", "average", "-co", "COMPRESS=DEFLATE",
-                        str(config.WORK / region / "elevation.vrt"), str(path)],
+                        str(config.WORK / region / "elevation.vrt"), str(partial)],
                        check=True, env={**os.environ, **GDAL_REMOTE_ENV})
+        partial.replace(path)
     with rasterio.open(path) as src:
         ground_m = src.read(1).astype(np.float32)
         ground_m[ground_m < -100] = np.nan  # no-data
